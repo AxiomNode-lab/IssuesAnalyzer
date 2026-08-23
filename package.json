@@ -1,0 +1,13 @@
+{
+  "name": "test-the-brain",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.12.1",
+  "engines": { "node": ">=22 <23" },
+  "scripts": {
+    "dev": "pnpm --filter @brain/desktop dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "validate": "pnpm typecheck && pnpm build"
+  }
+}
