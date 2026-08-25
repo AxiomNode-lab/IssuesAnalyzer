@@ -13,13 +13,19 @@ The broad idea is not new. Issue discovery and repository-health scoring exist s
 | [CodeTriage](https://www.codetriage.com/) | Sends open-source issues to contributors | Does not center an explainable pursue/skip analysis |
 | [Up For Grabs](https://up-for-grabs.net/) | Curated projects with contributor tasks | Project directory rather than opportunity-risk analysis |
 | [For Good First Issue](https://github.com/github/forgoodfirstissue) | Social-impact project curation | Narrow mission and label-based discovery |
+| [EddieHub Good First Issue Finder](https://github.com/EddieHubCommunity/good-first-issue-finder) | Open-source issue finder; currently archived | Discovery product, not issue-specific risk analysis |
+| [Fastify gh-issues-finder](https://github.com/fastify/gh-issues-finder) | Finds issues across repositories | Search/finding focus |
 | [voscarmv/issue-finder](https://github.com/voscarmv/issue-finder) | Beginner-friendly issue search | Search engine; limited readiness/response analysis |
 | [grayad/first-issue-finder](https://github.com/grayad/first-issue-finder) | GitHub API good-first-issue browser | Label-based finder |
+| [IssueMatch](https://github.com/AvishkarPatil/IssueMatch) | GitHub issue matching project | Close in naming/matching; requires deeper product comparison before implementation |
 | [GitIsMatch](https://medium.com/@samiratra95/matching-your-code-with-purpose-how-gitismatch-uses-ai-to-bridge-the-open-source-gap-0d8873dd2e46) | AI matching of contributors and projects | Matching is close; differentiation must be evidence and time-risk |
 | [Statflare Repo Analyzer](https://www.statflare.in/github-repo-analyzer) | Repository health score | Repository-level analysis, not issue/user decision |
 | [GitHub Health Analyzer](https://github.com/xedi1/GitHub-Health-Analayzer) | CLI repository health score | Adjacent building block, not full contributor workflow |
 | [Opire](https://opire.dev/) | GitHub-linked rewards | Bounty workflow, not general opportunity-quality analysis |
-| [IssueHunt](https://oss.issuehunt.io/) | Funded open-source issues | Some listings appear old; payment marketplace focus |
+| [IssueHunt](https://oss.issuehunt.io/) | Funded open-source issues | Payment marketplace focus; listing freshness must be checked per issue |
+
+## GitHub scan
+GitHub repository searches for “good first issue finder,” “open source issue recommendation,” “GitHub repository health analyzer,” and “GitHub issue matcher” returned many small and overlapping implementations. This disproves a uniqueness claim for discovery or matching alone. It also reinforces that our MVP should start with one-URL, evidence-backed decision support rather than another label browser.
 
 ## Demand signals
 Reddit discussions repeatedly mention ignored pull requests and advise contributors to inspect recent maintainer response and PR activity before starting. This supports the problem hypothesis, but anecdotes are not market validation:
