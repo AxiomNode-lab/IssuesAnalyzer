@@ -1,10 +1,5 @@
 import { GitHubClientError } from "./errors";
-import type {
-  GitHubActor,
-  GitHubIssue,
-  GitHubIssueComment,
-  GitHubRepository,
-} from "./types";
+import type { GitHubActor, GitHubIssue, GitHubIssueComment, GitHubRepository } from "./types";
 
 type JsonObject = Record<string, unknown>;
 

@@ -29,6 +29,17 @@ function issueFixture(): Record<string, unknown> {
   };
 }
 
+function commentFixture(): Record<string, unknown> {
+  return {
+    id: 9,
+    body: "A comment",
+    user: { login: "reviewer", html_url: "https://github.com/reviewer" },
+    created_at: "2026-08-01T10:00:00Z",
+    updated_at: "2026-08-01T10:00:00Z",
+    html_url: "https://github.com/octocat/Hello-World/issues/1347#issuecomment-9",
+  };
+}
+
 describe("GitHubClient", () => {
   it("uses the fixed GitHub origin, read-only headers, and normalizes an issue", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
@@ -127,17 +138,11 @@ describe("GitHubClient", () => {
   });
 
   it("bounds pagination and stops after the configured maximum", async () => {
-    const comment = {
-      id: 9,
-      body: "A comment",
-      user: { login: "reviewer", html_url: "https://github.com/reviewer" },
-      created_at: "2026-08-01T10:00:00Z",
-      updated_at: "2026-08-01T10:00:00Z",
-      html_url: "https://github.com/octocat/Hello-World/issues/1347#issuecomment-9",
-    };
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(new Response(JSON.stringify([comment]), { status: 200 }));
+      .mockImplementation(
+        async () => new Response(JSON.stringify([commentFixture()]), { status: 200 }),
+      );
     const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
 
     const result = await client.listIssueComments(reference, { perPage: 1, maxPages: 2 });
@@ -152,6 +157,21 @@ describe("GitHubClient", () => {
     expect(result.data).toHaveLength(2);
   });
 
+  it("clamps perPage to 100 and pagination to five pages", async () => {
+    const fullPage = Array.from({ length: 100 }, commentFixture);
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response(JSON.stringify(fullPage), { status: 200 }));
+    const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
+
+    const result = await client.listIssueComments(reference, { perPage: 1_000, maxPages: 100 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("?per_page=100&page=1");
+    expect(fetchMock.mock.calls[4]?.[0]).toContain("?per_page=100&page=5");
+    expect(result.data).toHaveLength(500);
+  });
+
   it("stops pagination when GitHub returns a short page", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
@@ -161,6 +181,34 @@ describe("GitHubClient", () => {
     await client.listIssueComments(reference, { perPage: 100, maxPages: 5 });
 
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a malformed comment-page payload", async () => {
+    const client = new GitHubClient({
+      maxRetries: 0,
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(new Response("{}", { status: 200 })),
+    });
+
+    await expect(client.listIssueComments(reference)).rejects.toMatchObject({
+      kind: "invalid_payload",
+    });
+  });
+
+  it("returns a classified error instead of partial comments when a later page fails", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify([commentFixture()]), { status: 200 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 429, headers: { "retry-after": "30" } }));
+    const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
+
+    await expect(
+      client.listIssueComments(reference, { perPage: 1, maxPages: 5 }),
+    ).rejects.toMatchObject({
+      kind: "rate_limited",
+      status: 429,
+      retryAfterSeconds: 30,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("retries bounded transient upstream failures", async () => {
