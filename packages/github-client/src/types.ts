@@ -27,6 +27,15 @@ export type GitHubIssue = Readonly<{
   htmlUrl: string;
 }>;
 
+export type GitHubIssueComment = Readonly<{
+  id: number;
+  body: string | null;
+  author: GitHubActor;
+  createdAt: Date;
+  updatedAt: Date;
+  htmlUrl: string;
+}>;
+
 export type GitHubRepository = Readonly<{
   id: number;
   fullName: string;
