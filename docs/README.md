@@ -9,6 +9,7 @@ This directory is the source of truth for GitHub Opportunity Radar.
 - [Market and competitor research](MARKET_RESEARCH.md)
 - [Competitive differentiation](COMPETITIVE_DIFFERENTIATION.md)
 - [Research method and limitations](RESEARCH_METHOD.md)
+- [Frontend experience and Roman visual system](FRONTEND_EXPERIENCE.md)
 
 ## Validation
 - [Phase 0 validation kit](validation/README.md)
@@ -27,6 +28,7 @@ This directory is the source of truth for GitHub Opportunity Radar.
 - [Performance and reliability](PERFORMANCE_AND_RELIABILITY.md)
 - [Testing strategy](TESTING_STRATEGY.md)
 - [Operations](OPERATIONS.md)
+- [GitHub workflow for beginners](GITHUB_WORKFLOW_FOR_BEGINNERS.md)
 
 ## Decisions
 - [ADR index](adr/README.md)
