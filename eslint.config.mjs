@@ -9,8 +9,8 @@ export default [
       "**/dist/**",
       "**/node_modules/**",
       "**/playwright-report/**",
-      "**/test-results/**"
-    ]
+      "**/test-results/**",
+    ],
   },
   eslint.configs.recommended,
   {
@@ -18,9 +18,9 @@ export default [
     languageOptions: {
       ecmaVersion: "latest",
       globals: {
-        ...globals.node
+        ...globals.node,
       },
-      sourceType: "module"
-    }
-  }
+      sourceType: "module",
+    },
+  },
 ];

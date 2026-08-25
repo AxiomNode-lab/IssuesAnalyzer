@@ -38,16 +38,16 @@ The current bootstrap does not install application frameworks or external servic
 
 ## Root commands
 
-| Command | Purpose |
-| --- | --- |
-| `pnpm dev` | Run the web workspace after MVP-02 creates it. |
-| `pnpm format` | Apply deterministic formatting. |
-| `pnpm format:check` | Verify formatting without writing files. |
-| `pnpm lint` | Run static lint checks. |
-| `pnpm typecheck` | Type-check all workspaces that define the command. |
-| `pnpm test` | Run unit tests; succeeds before the first test is added. |
-| `pnpm build` | Build all workspaces that define the command. |
-| `pnpm verify` | Run every required local quality check. |
+| Command             | Purpose                                                  |
+| ------------------- | -------------------------------------------------------- |
+| `pnpm dev`          | Run the web workspace after MVP-02 creates it.           |
+| `pnpm format`       | Apply deterministic formatting.                          |
+| `pnpm format:check` | Verify formatting without writing files.                 |
+| `pnpm lint`         | Run static lint checks.                                  |
+| `pnpm typecheck`    | Type-check all workspaces that define the command.       |
+| `pnpm test`         | Run unit tests; succeeds before the first test is added. |
+| `pnpm build`        | Build all workspaces that define the command.            |
+| `pnpm verify`       | Run every required local quality check.                  |
 
 ## Dependency rules
 
