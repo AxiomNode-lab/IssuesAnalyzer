@@ -3,6 +3,7 @@ export { GitHubClientError, type GitHubClientErrorKind } from "./errors";
 export type {
   GitHubActor,
   GitHubIssue,
+  GitHubIssueComment,
   GitHubQuota,
   GitHubRepository,
   GitHubResponse,
