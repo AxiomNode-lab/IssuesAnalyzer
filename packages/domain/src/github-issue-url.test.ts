@@ -4,7 +4,9 @@ import { parseGitHubIssueUrl } from "./github-issue-url";
 
 describe("parseGitHubIssueUrl", () => {
   it("returns canonical identifiers for a valid public issue URL", () => {
-    expect(parseGitHubIssueUrl("https://github.com/GittieLabs/hardware-agent-studio/issues/247")).toEqual({
+    expect(
+      parseGitHubIssueUrl("https://github.com/GittieLabs/hardware-agent-studio/issues/247"),
+    ).toEqual({
       ok: true,
       value: {
         owner: "GittieLabs",

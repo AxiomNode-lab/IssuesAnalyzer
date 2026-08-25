@@ -49,6 +49,8 @@ importers:
         specifier: ^19.2.0
         version: 19.2.5(@types/react@19.2.18)
 
+  packages/domain: {}
+
 packages:
 
   '@emnapi/runtime@1.11.3':
