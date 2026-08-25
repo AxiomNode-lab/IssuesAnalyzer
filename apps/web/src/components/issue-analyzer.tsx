@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useId, useState } from "react";
+import { useId, useState } from "react";
+import type { FormEvent } from "react";
 
 type Status = "empty" | "invalid" | "loading" | "unavailable";
 
