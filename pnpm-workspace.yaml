@@ -1,0 +1,12 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+allowBuilds:
+  esbuild: true
+
+# Reduce exposure to brand-new compromised releases.
+minimumReleaseAge: 1440
+
+# Native install scripts must be explicitly reviewed before they are allowed.
+onlyBuiltDependencies: []
