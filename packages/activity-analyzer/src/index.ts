@@ -57,6 +57,23 @@ function validDate(date: Date, name: string): void {
   if (Number.isNaN(date.getTime())) throw new TypeError(`Invalid ${name} date.`);
 }
 
+function validHistoricalDate(date: Date, asOf: Date, name: string): void {
+  validDate(date, name);
+  if (date > asOf) throw new RangeError(`${name} date cannot be after asOf.`);
+}
+
+function newestBounded(items: readonly TimestampEvidence[], limit: number): TimestampEvidence[] {
+  return [...items]
+    .sort((left, right) => {
+      const leftTime = left.occurredAt.getTime();
+      const rightTime = right.occurredAt.getTime();
+      if (leftTime !== rightTime) return rightTime > leftTime ? 1 : -1;
+      if (left.sourceUrl === right.sourceUrl) return 0;
+      return left.sourceUrl < right.sourceUrl ? -1 : 1;
+    })
+    .slice(0, limit);
+}
+
 function newest(items: readonly TimestampEvidence[]): TimestampEvidence | null {
   return items.reduce<TimestampEvidence | null>(
     (latest, item) => (latest === null || item.occurredAt > latest.occurredAt ? item : latest),
@@ -77,14 +94,18 @@ function confidence(presentSignals: number): Readonly<{ level: ConfidenceLevel; 
   return { level: value >= 75 ? "high" : value >= 50 ? "medium" : "low", value };
 }
 
-export function analyzeRepositoryActivity(input: RepositoryActivityInput): RepositoryActivityResult {
+export function analyzeRepositoryActivity(
+  input: RepositoryActivityInput,
+): RepositoryActivityResult {
   validDate(input.asOf, "asOf");
-  validDate(input.repository.createdAt, "repository creation");
-  if (input.repository.pushedAt !== null) validDate(input.repository.pushedAt, "repository push");
+  validHistoricalDate(input.repository.createdAt, input.asOf, "repository creation");
+  if (input.repository.pushedAt !== null)
+    validHistoricalDate(input.repository.pushedAt, input.asOf, "repository push");
 
-  const commits = input.commits?.slice(0, MAX_COMMITS) ?? [];
-  const releases = input.releases?.slice(0, MAX_RELEASES) ?? [];
-  for (const evidence of [...commits, ...releases]) validDate(evidence.occurredAt, "evidence");
+  for (const evidence of [...(input.commits ?? []), ...(input.releases ?? [])])
+    validHistoricalDate(evidence.occurredAt, input.asOf, "evidence");
+  const commits = newestBounded(input.commits ?? [], MAX_COMMITS);
+  const releases = newestBounded(input.releases ?? [], MAX_RELEASES);
 
   const latestCommit = newest(commits);
   const latestRelease = newest(releases);
@@ -147,11 +168,16 @@ export function analyzeRepositoryActivity(input: RepositoryActivityInput): Repos
   if (input.commits === null) warnings.push("Commit evidence is unavailable.");
   if (input.releases === null) warnings.push("Release evidence is unavailable.");
   if (input.readiness === null) warnings.push("Contribution-readiness evidence is unavailable.");
-  if ((input.commits?.length ?? 0) > MAX_COMMITS) warnings.push("Commit evidence was bounded to 100 records.");
-  if ((input.releases?.length ?? 0) > MAX_RELEASES) warnings.push("Release evidence was bounded to 20 records.");
+  if ((input.commits?.length ?? 0) > MAX_COMMITS)
+    warnings.push("Commit evidence was bounded to 100 records.");
+  if ((input.releases?.length ?? 0) > MAX_RELEASES)
+    warnings.push("Release evidence was bounded to 20 records.");
 
   const evidenceConfidence = confidence(
-    1 + Number(input.commits !== null) + Number(input.releases !== null) + Number(input.readiness !== null),
+    1 +
+      Number(input.commits !== null) +
+      Number(input.releases !== null) +
+      Number(input.readiness !== null),
   );
 
   if (input.repository.archived || input.repository.disabled) {
@@ -167,7 +193,8 @@ export function analyzeRepositoryActivity(input: RepositoryActivityInput): Repos
   }
 
   const availableScores: number[] = [];
-  if (latestActivity !== null) availableScores.push(recencyScore(daysBetween(input.asOf, latestActivity.occurredAt)));
+  if (latestActivity !== null)
+    availableScores.push(recencyScore(daysBetween(input.asOf, latestActivity.occurredAt)));
   if (input.readiness !== null) {
     const readinessCount = [
       input.readiness.contributingGuide,

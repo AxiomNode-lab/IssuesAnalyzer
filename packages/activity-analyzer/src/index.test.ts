@@ -93,6 +93,14 @@ describe("analyzeRepositoryActivity", () => {
     expect(result.score).toBe(0);
   });
 
+  it("makes disabled status decisive", () => {
+    const result = analyzeRepositoryActivity(
+      input({ repository: { ...input().repository, disabled: true } }),
+    );
+    expect(result.status).toBe("archived");
+    expect(result.score).toBe(0);
+  });
+
   it("lowers confidence for missing evidence instead of converting it to zero", () => {
     const result = analyzeRepositoryActivity(
       input({ commits: null, releases: null, readiness: null }),
@@ -113,6 +121,50 @@ describe("analyzeRepositoryActivity", () => {
     expect(result.evidenceWindow).toEqual({ commitsUsed: 100, releasesUsed: 20 });
     expect(result.warnings).toContain("Commit evidence was bounded to 100 records.");
     expect(result.warnings).toContain("Release evidence was bounded to 20 records.");
+  });
+
+  it("selects the newest evidence before applying collection limits", () => {
+    const commits = [
+      ...Array.from({ length: 100 }, (_, index) =>
+        evidence("2025-01-01T00:00:00.000Z", `commit/${index}`),
+      ),
+      evidence("2026-08-24T00:00:00.000Z", "commit/latest"),
+    ];
+    const releases = [
+      ...Array.from({ length: 20 }, (_, index) =>
+        evidence("2024-01-01T00:00:00.000Z", `release/${index}`),
+      ),
+      evidence("2026-08-23T00:00:00.000Z", "release/latest"),
+    ];
+
+    const result = analyzeRepositoryActivity(input({ commits, releases }));
+
+    expect(result.evidenceWindow).toEqual({ commitsUsed: 100, releasesUsed: 20 });
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({
+        key: "repository.latestActivityAt",
+        value: "2026-08-24T00:00:00.000Z",
+        sourceUrl: `${source}/commit/latest`,
+      }),
+    );
+  });
+
+  it("rejects future evidence instead of reporting misleading freshness", () => {
+    expect(() =>
+      analyzeRepositoryActivity(
+        input({ commits: [evidence("2026-08-26T00:00:00.000Z", "commit/future")] }),
+      ),
+    ).toThrow(new RangeError("evidence date cannot be after asOf."));
+  });
+
+  it("includes provenance and freshness metadata on every fact", () => {
+    const result = analyzeRepositoryActivity(input());
+
+    for (const fact of result.facts) {
+      expect(fact.sourceUrl).not.toBe("");
+      expect(fact.observedAt).toEqual(asOf);
+      expect(fact.freshnessDays).toBeGreaterThanOrEqual(0);
+    }
   });
 
   it("is deterministic for the same explicit evidence and asOf timestamp", () => {
