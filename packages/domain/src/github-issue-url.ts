@@ -37,14 +37,14 @@ function failure(code: GitHubIssueUrlErrorCode, message: string): GitHubIssueUrl
 }
 
 export function parseGitHubIssueUrl(input: string): GitHubIssueUrlResult {
+  if (/[\\\u0000-\u001F\u007F]/.test(input)) {
+    return failure("MALFORMED_URL", "Control characters and backslashes are not allowed.");
+  }
+
   const candidate = input.trim();
 
   if (candidate.length === 0) {
     return failure("EMPTY", "Enter a GitHub issue URL.");
-  }
-
-  if (/[\\\u0000-\u001F\u007F]/.test(candidate)) {
-    return failure("MALFORMED_URL", "Control characters and backslashes are not allowed.");
   }
 
   let url: URL;
