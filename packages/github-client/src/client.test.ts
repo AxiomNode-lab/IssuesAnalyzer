@@ -85,9 +85,9 @@ describe("GitHubClient", () => {
     const payload = { ...issueFixture(), pull_request: { url: "https://api.github.com/pulls/1" } };
     const client = new GitHubClient({
       maxRetries: 0,
-      fetch: vi.fn<typeof fetch>().mockResolvedValue(
-        new Response(JSON.stringify(payload), { status: 200 }),
-      ),
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 })),
     });
 
     await expect(client.getIssue(reference)).rejects.toMatchObject({
@@ -98,7 +98,9 @@ describe("GitHubClient", () => {
   it("rejects malformed upstream JSON without exposing its body", async () => {
     const client = new GitHubClient({
       maxRetries: 0,
-      fetch: vi.fn<typeof fetch>().mockResolvedValue(new Response("{token: secret}", { status: 200 })),
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response("{token: secret}", { status: 200 })),
     });
 
     try {

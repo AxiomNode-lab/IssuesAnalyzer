@@ -55,7 +55,9 @@ export class GitHubClient {
     );
   }
 
-  async getRepository(reference: Pick<GitHubIssueUrl, "owner" | "repository">): Promise<GitHubResponse<GitHubRepository>> {
+  async getRepository(
+    reference: Pick<GitHubIssueUrl, "owner" | "repository">,
+  ): Promise<GitHubResponse<GitHubRepository>> {
     return this.#get(
       `/repos/${encodeURIComponent(reference.owner)}/${encodeURIComponent(reference.repository)}`,
       parseRepository,
@@ -100,7 +102,9 @@ export class GitHubClient {
       } catch (error) {
         if (error instanceof GitHubClientError) throw error;
         if (error instanceof DOMException && error.name === "TimeoutError") {
-          throw new GitHubClientError("timeout", "GitHub did not respond before the deadline.", { cause: error });
+          throw new GitHubClientError("timeout", "GitHub did not respond before the deadline.", {
+            cause: error,
+          });
         }
         if (attempt < this.#maxRetries) continue;
         throw new GitHubClientError("network", "GitHub could not be reached.", { cause: error });
@@ -117,11 +121,16 @@ export class GitHubClient {
       requestId: requestId ?? undefined,
     };
 
-    if (response.status === 404) return new GitHubClientError("not_found", "GitHub resource was not found.", context);
-    if (response.status === 429 || (response.status === 403 && response.headers.get("x-ratelimit-remaining") === "0")) {
+    if (response.status === 404)
+      return new GitHubClientError("not_found", "GitHub resource was not found.", context);
+    if (
+      response.status === 429 ||
+      (response.status === 403 && response.headers.get("x-ratelimit-remaining") === "0")
+    ) {
       return new GitHubClientError("rate_limited", "GitHub rate limit was reached.", context);
     }
-    if (response.status === 403) return new GitHubClientError("forbidden", "GitHub denied access to the resource.", context);
+    if (response.status === 403)
+      return new GitHubClientError("forbidden", "GitHub denied access to the resource.", context);
     return new GitHubClientError("upstream", "GitHub returned an unexpected response.", context);
   }
 }

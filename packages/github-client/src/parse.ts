@@ -58,7 +58,10 @@ function actor(value: unknown): GitHubActor {
 export function parseIssue(value: unknown): GitHubIssue {
   const source = object(value);
   if ("pull_request" in source) {
-    throw new GitHubClientError("invalid_payload", "Expected an issue but GitHub returned a pull request.");
+    throw new GitHubClientError(
+      "invalid_payload",
+      "Expected an issue but GitHub returned a pull request.",
+    );
   }
 
   const state = string(source.state, "issue state");
