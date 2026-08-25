@@ -6,6 +6,9 @@ coverage/
 .env.*
 !.env.example
 *.log
+*.tsbuildinfo
 .DS_Store
 .idea/
 .vscode/
+apps/web/AGENTS.md
+apps/web/CLAUDE.md
