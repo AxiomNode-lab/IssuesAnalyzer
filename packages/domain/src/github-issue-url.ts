@@ -43,6 +43,10 @@ export function parseGitHubIssueUrl(input: string): GitHubIssueUrlResult {
     return failure("EMPTY", "Enter a GitHub issue URL.");
   }
 
+  if (/[\\\u0000-\u001F\u007F]/.test(candidate)) {
+    return failure("MALFORMED_URL", "Control characters and backslashes are not allowed.");
+  }
+
   let url: URL;
   try {
     url = new URL(candidate);
@@ -80,15 +84,15 @@ export function parseGitHubIssueUrl(input: string): GitHubIssueUrlResult {
     return failure("UNSUPPORTED_PATH", "Encoded or ambiguous path characters are not allowed.");
   }
 
-  const segments = url.pathname.split("/").filter(Boolean);
-  if (segments.length !== 4 || segments[2] !== "issues") {
+  const pathMatch = /^\/([^/]+)\/([^/]+)\/issues\/([^/]+)\/?$/.exec(url.pathname);
+  if (pathMatch === null) {
     return failure(
       "UNSUPPORTED_PATH",
       "Use the format https://github.com/owner/repository/issues/123.",
     );
   }
 
-  const [owner, repository, , issueNumberText] = segments;
+  const [, owner, repository, issueNumberText] = pathMatch;
 
   if (owner === undefined || !OWNER_PATTERN.test(owner)) {
     return failure("INVALID_OWNER", "The GitHub owner name is invalid.");
