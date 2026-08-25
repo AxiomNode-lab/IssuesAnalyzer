@@ -1,8 +1,14 @@
 import type { GitHubIssueUrl } from "@opportunity-radar/domain";
 
 import { GitHubClientError } from "./errors";
-import { parseIssue, parseRepository } from "./parse";
-import type { GitHubIssue, GitHubQuota, GitHubRepository, GitHubResponse } from "./types";
+import { parseIssue, parseIssueCommentPage, parseRepository } from "./parse";
+import type {
+  GitHubIssue,
+  GitHubIssueComment,
+  GitHubQuota,
+  GitHubRepository,
+  GitHubResponse,
+} from "./types";
 
 const API_ORIGIN = "https://api.github.com";
 const API_VERSION = "2026-03-10";
@@ -53,6 +59,37 @@ export class GitHubClient {
       `/repos/${encodeURIComponent(reference.owner)}/${encodeURIComponent(reference.repository)}/issues/${reference.issueNumber}`,
       parseIssue,
     );
+  }
+
+  async listIssueComments(
+    reference: GitHubIssueUrl,
+    options: Readonly<{ perPage?: number; maxPages?: number }> = {},
+  ): Promise<GitHubResponse<readonly GitHubIssueComment[]>> {
+    const perPage = Math.min(Math.max(options.perPage ?? 100, 1), 100);
+    const maxPages = Math.min(Math.max(options.maxPages ?? 3, 1), 5);
+    const comments: GitHubIssueComment[] = [];
+    let lastMetadata: Pick<GitHubResponse<unknown>, "quota" | "requestId"> | null = null;
+
+    for (let page = 1; page <= maxPages; page += 1) {
+      const response = await this.#get(
+        `/repos/${encodeURIComponent(reference.owner)}/${encodeURIComponent(reference.repository)}/issues/${reference.issueNumber}/comments?per_page=${perPage}&page=${page}`,
+        parseIssueCommentPage,
+      );
+      comments.push(...response.data);
+      lastMetadata = response;
+      if (response.data.length < perPage) break;
+    }
+
+    return {
+      data: comments,
+      quota: lastMetadata?.quota ?? {
+        limit: null,
+        remaining: null,
+        used: null,
+        resetAt: null,
+      },
+      requestId: lastMetadata?.requestId ?? null,
+    };
   }
 
   async getRepository(
