@@ -51,6 +51,12 @@ importers:
 
   packages/domain: {}
 
+  packages/github-client:
+    dependencies:
+      '@opportunity-radar/domain':
+        specifier: workspace:*
+        version: link:../domain
+
 packages:
 
   '@emnapi/runtime@1.11.3':
