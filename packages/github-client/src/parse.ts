@@ -1,5 +1,10 @@
 import { GitHubClientError } from "./errors";
-import type { GitHubActor, GitHubIssue, GitHubRepository } from "./types";
+import type {
+  GitHubActor,
+  GitHubIssue,
+  GitHubIssueComment,
+  GitHubRepository,
+} from "./types";
 
 type JsonObject = Record<string, unknown>;
 
@@ -89,6 +94,25 @@ export function parseIssue(value: unknown): GitHubIssue {
     closedAt: nullableDate(source.closed_at, "closed date"),
     htmlUrl: string(source.html_url, "issue URL"),
   };
+}
+
+export function parseIssueComment(value: unknown): GitHubIssueComment {
+  const source = object(value);
+  return {
+    id: number(source.id, "comment id"),
+    body: nullableString(source.body, "comment body"),
+    author: actor(source.user),
+    createdAt: date(source.created_at, "created date"),
+    updatedAt: date(source.updated_at, "updated date"),
+    htmlUrl: string(source.html_url, "comment URL"),
+  };
+}
+
+export function parseIssueCommentPage(value: unknown): readonly GitHubIssueComment[] {
+  if (!Array.isArray(value)) {
+    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid comment page.");
+  }
+  return value.map(parseIssueComment);
 }
 
 export function parseRepository(value: unknown): GitHubRepository {
