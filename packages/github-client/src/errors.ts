@@ -17,9 +17,9 @@ export class GitHubClientError extends Error {
     kind: GitHubClientErrorKind,
     message: string,
     options: {
-      status?: number;
-      retryAfterSeconds?: number;
-      requestId?: string;
+      status?: number | undefined;
+      retryAfterSeconds?: number | undefined;
+      requestId?: string | undefined;
       cause?: unknown;
     } = {},
   ) {
