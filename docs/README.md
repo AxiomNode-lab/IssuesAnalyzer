@@ -10,6 +10,12 @@ This directory is the source of truth for GitHub Opportunity Radar.
 - [Competitive differentiation](COMPETITIVE_DIFFERENTIATION.md)
 - [Research method and limitations](RESEARCH_METHOD.md)
 
+## Validation
+- [Phase 0 validation kit](validation/README.md)
+- [Static report prototype](validation/REPORT_PROTOTYPE.md)
+- [Interview script](validation/INTERVIEW_SCRIPT.md)
+- [Feedback scorecard](validation/FEEDBACK_SCORECARD.md)
+
 ## Engineering
 - [System architecture](ARCHITECTURE.md)
 - [GitHub integration and API constraints](GITHUB_INTEGRATION.md)
