@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a measurable user outcome
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Describe the problem before proposing a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or examples
+  - type: textarea
+    id: risks
+    attributes:
+      label: Security, privacy, or abuse risks
