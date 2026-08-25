@@ -7,6 +7,7 @@ This directory is the source of truth for GitHub Opportunity Radar.
 - [User journeys](USER_JOURNEYS.md)
 - [Roadmap](ROADMAP.md)
 - [Market and competitor research](MARKET_RESEARCH.md)
+- [Competitive differentiation](COMPETITIVE_DIFFERENTIATION.md)
 - [Research method and limitations](RESEARCH_METHOD.md)
 
 ## Engineering
