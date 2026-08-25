@@ -62,8 +62,10 @@ export function parseGitHubIssueUrl(input: string): GitHubIssueUrlResult {
     return failure("CREDENTIALS_NOT_ALLOWED", "Credentials are not allowed in the URL.");
   }
 
-  if (url.port !== "") {
-    return failure("PORT_NOT_ALLOWED", "Custom ports are not allowed.");
+  const authority = candidate.match(/^https:\/\/([^/?#]*)/i)?.[1] ?? "";
+  const hostWithPort = authority.slice(authority.lastIndexOf("@") + 1);
+  if (url.port !== "" || hostWithPort.toLowerCase() !== "github.com") {
+    return failure("PORT_NOT_ALLOWED", "Explicit ports are not allowed.");
   }
 
   if (url.search !== "") {
