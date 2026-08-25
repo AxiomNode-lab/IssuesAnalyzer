@@ -76,12 +76,14 @@ export function IssueAnalyzer() {
         )}
         {status === "unavailable" && (
           <div className="form-message notice" role="status">
-            <strong>Interface preview complete.</strong> Live GitHub analysis arrives with the API milestone.
-            Your URL was not sent anywhere.
+            <strong>Interface preview complete.</strong> Live GitHub analysis arrives with the API
+            milestone. Your URL was not sent anywhere.
           </div>
         )}
         {status === "empty" && (
-          <p className="form-hint">Public issues only. No GitHub token is used in this interface milestone.</p>
+          <p className="form-hint">
+            Public issues only. No GitHub token is used in this interface milestone.
+          </p>
         )}
       </form>
     </div>

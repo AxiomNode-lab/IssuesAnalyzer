@@ -10,10 +10,14 @@ const signals = [
 export default function Home() {
   return (
     <>
-      <a className="skip-link" href="#main">Skip to content</a>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <header className="site-header">
         <a className="brand" href="/" aria-label="GitHub Opportunity Radar home">
-          <span className="brand-mark" aria-hidden="true">⌁</span>
+          <span className="brand-mark" aria-hidden="true">
+            ⌁
+          </span>
           <span>Opportunity Radar</span>
         </a>
         <span className="version">MVP v0.1</span>
@@ -38,7 +42,9 @@ export default function Home() {
           <div className="signal-grid">
             {signals.map(([title, description], index) => (
               <article className="signal-card" key={title}>
-                <span className="index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+                <span className="index" aria-hidden="true">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
                 <h3>{title}</h3>
                 <p>{description}</p>
               </article>
@@ -50,14 +56,28 @@ export default function Home() {
           <div>
             <p className="eyebrow">Report structure</p>
             <h2 id="preview-title">A clear decision, backed by evidence.</h2>
-            <p>No promise of acceptance or payment—only a transparent estimate with confidence and risks.</p>
+            <p>
+              No promise of acceptance or payment—only a transparent estimate with confidence and
+              risks.
+            </p>
           </div>
           <div className="preview-card">
-            <div className="seal" aria-label="Example recommendation: Review carefully">Review carefully</div>
+            <div className="seal" aria-label="Example recommendation: Review carefully">
+              Review carefully
+            </div>
             <dl>
-              <div><dt>Opportunity score</dt><dd>— / 100</dd></div>
-              <div><dt>Confidence</dt><dd>Awaiting evidence</dd></div>
-              <div><dt>Next action</dt><dd>Confirm availability</dd></div>
+              <div>
+                <dt>Opportunity score</dt>
+                <dd>— / 100</dd>
+              </div>
+              <div>
+                <dt>Confidence</dt>
+                <dd>Awaiting evidence</dd>
+              </div>
+              <div>
+                <dt>Next action</dt>
+                <dd>Confirm availability</dd>
+              </div>
             </dl>
           </div>
         </section>
