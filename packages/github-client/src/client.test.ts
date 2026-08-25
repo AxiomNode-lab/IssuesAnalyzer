@@ -112,6 +112,57 @@ describe("GitHubClient", () => {
     }
   });
 
+  it("classifies network and timeout failures", async () => {
+    const networkClient = new GitHubClient({
+      maxRetries: 0,
+      fetch: vi.fn<typeof fetch>().mockRejectedValue(new TypeError("connection failed")),
+    });
+    const timeoutClient = new GitHubClient({
+      maxRetries: 0,
+      fetch: vi.fn<typeof fetch>().mockRejectedValue(new DOMException("deadline", "TimeoutError")),
+    });
+
+    await expect(networkClient.getIssue(reference)).rejects.toMatchObject({ kind: "network" });
+    await expect(timeoutClient.getIssue(reference)).rejects.toMatchObject({ kind: "timeout" });
+  });
+
+  it("bounds pagination and stops after the configured maximum", async () => {
+    const comment = {
+      id: 9,
+      body: "A comment",
+      user: { login: "reviewer", html_url: "https://github.com/reviewer" },
+      created_at: "2026-08-01T10:00:00Z",
+      updated_at: "2026-08-01T10:00:00Z",
+      html_url: "https://github.com/octocat/Hello-World/issues/1347#issuecomment-9",
+    };
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify([comment]), { status: 200 }));
+    const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
+
+    const result = await client.listIssueComments(reference, { perPage: 1, maxPages: 2 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api.github.com/repos/octocat/Hello-World/issues/1347/comments?per_page=1&page=1",
+    );
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "https://api.github.com/repos/octocat/Hello-World/issues/1347/comments?per_page=1&page=2",
+    );
+    expect(result.data).toHaveLength(2);
+  });
+
+  it("stops pagination when GitHub returns a short page", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify([]), { status: 200 }));
+    const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
+
+    await client.listIssueComments(reference, { perPage: 100, maxPages: 5 });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it("retries bounded transient upstream failures", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
