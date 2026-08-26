@@ -6,6 +6,8 @@ import {
   parseCommunityProfile,
   parseIssue,
   parseIssueCommentPage,
+  parseIssueEventPage,
+  parsePullRequestPage,
   parseReleasePage,
   parseRepository,
 } from "./parse";
@@ -14,6 +16,8 @@ import type {
   GitHubCommunityProfile,
   GitHubIssue,
   GitHubIssueComment,
+  GitHubIssueEvent,
+  GitHubPullRequestEvidence,
   GitHubQuota,
   GitHubReleaseEvidence,
   GitHubRepository,
@@ -137,6 +141,49 @@ export class GitHubClient {
     const sourceUrl = `https://github.com/${reference.owner}/${reference.repository}/community`;
     return this.#get(`${repositoryPath(reference)}/community/profile`, (payload) =>
       parseCommunityProfile(payload, sourceUrl),
+    );
+  }
+
+  async listIssueTimeline(
+    reference: GitHubIssueUrl,
+    options: Readonly<{ perPage?: number; maxPages?: number }> = {},
+  ): Promise<GitHubResponse<readonly GitHubIssueEvent[]>> {
+    const perPage = clamp(options.perPage, 100, 100);
+    const maxPages = clamp(options.maxPages, 2, 3);
+    const events: GitHubIssueEvent[] = [];
+    const sourceUrl = reference.canonicalUrl;
+    let lastMetadata: Pick<GitHubResponse<unknown>, "quota" | "requestId"> | null = null;
+
+    for (let page = 1; page <= maxPages; page += 1) {
+      const response = await this.#get(
+        `${repositoryPath(reference)}/issues/${reference.issueNumber}/timeline?per_page=${perPage}&page=${page}`,
+        (payload) => parseIssueEventPage(payload, sourceUrl),
+      );
+      events.push(...response.data);
+      lastMetadata = response;
+      if (response.data.length < perPage) break;
+    }
+
+    return {
+      data: events,
+      quota: lastMetadata?.quota ?? {
+        limit: null,
+        remaining: null,
+        used: null,
+        resetAt: null,
+      },
+      requestId: lastMetadata?.requestId ?? null,
+    };
+  }
+
+  async listRecentPullRequests(
+    reference: RepositoryReference,
+    options: Readonly<{ limit?: number }> = {},
+  ): Promise<GitHubResponse<readonly GitHubPullRequestEvidence[]>> {
+    const limit = clamp(options.limit, 100, 100);
+    return this.#get(
+      `${repositoryPath(reference)}/pulls?state=all&sort=updated&direction=desc&per_page=${limit}`,
+      parsePullRequestPage,
     );
   }
 
