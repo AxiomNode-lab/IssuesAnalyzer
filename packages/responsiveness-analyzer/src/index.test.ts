@@ -43,7 +43,13 @@ function thread(
     kind: index % 2 === 0 ? "pull_request" : "issue",
     openedAt,
     sourceUrl: `${repositoryUrl}/issues/${index}`,
-    interactions: [...extraInteractions, ...response],
+    interactions: [
+      ...extraInteractions.map((item, interactionIndex) => ({
+        ...item,
+        createdAt: new Date(openedAt.getTime() + (interactionIndex + 1) * 3_600_000),
+      })),
+      ...response,
+    ],
   };
 }
 
@@ -69,7 +75,7 @@ describe("analyzeMaintainerResponsiveness", () => {
 
   it("uses the median so an extreme delay does not dominate", () => {
     const result = analyzeMaintainerResponsiveness(
-      input({ threads: [thread(1, 1), thread(2, 2), thread(1_000, 3)] }),
+      input({ threads: [thread(1, 1), thread(2, 2), thread(500, 3)] }),
     );
     expect(result.status).toBe("responsive");
     expect(result.facts).toContainEqual(
