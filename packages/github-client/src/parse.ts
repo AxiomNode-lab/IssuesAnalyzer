@@ -5,6 +5,8 @@ import type {
   GitHubCommunityProfile,
   GitHubIssue,
   GitHubIssueComment,
+  GitHubIssueEvent,
+  GitHubPullRequestEvidence,
   GitHubReleaseEvidence,
   GitHubRepository,
 } from "./types";
@@ -69,6 +71,10 @@ function actor(value: unknown): GitHubActor {
     login: string(source.login, "actor login"),
     profileUrl: string(source.html_url, "actor profile URL"),
   };
+}
+
+function nullableActor(value: unknown): GitHubActor | null {
+  return value === null ? null : actor(value);
 }
 
 function filePresent(value: unknown, field: string): boolean {
@@ -199,4 +205,56 @@ export function parseCommunityProfile(
     issueTemplate: filePresent(files.issue_template, "issue template"),
     pullRequestTemplate: filePresent(files.pull_request_template, "pull request template"),
   };
+}
+
+export function parseIssueEventPage(
+  value: unknown,
+  sourceUrl: string,
+): readonly GitHubIssueEvent[] {
+  if (!Array.isArray(value)) {
+    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid timeline page.");
+  }
+
+  return value.map((entry) => {
+    const source = object(entry);
+    return {
+      nodeId: string(source.node_id, "timeline node id"),
+      event: string(source.event, "timeline event"),
+      actor: nullableActor(source.actor),
+      createdAt: date(source.created_at, "timeline event date"),
+      sourceUrl,
+    };
+  });
+}
+
+export function parsePullRequestPage(value: unknown): readonly GitHubPullRequestEvidence[] {
+  if (!Array.isArray(value)) {
+    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid pull request page.");
+  }
+
+  return value.map((entry) => {
+    const source = object(entry);
+    const state = string(source.state, "pull request state");
+    if (state !== "open" && state !== "closed") {
+      throw new GitHubClientError(
+        "invalid_payload",
+        "GitHub returned an invalid pull request state.",
+      );
+    }
+
+    return {
+      id: number(source.id, "pull request id"),
+      number: number(source.number, "pull request number"),
+      title: string(source.title, "pull request title"),
+      body: nullableString(source.body, "pull request body"),
+      state,
+      draft: boolean(source.draft, "pull request draft state"),
+      author: actor(source.user),
+      createdAt: date(source.created_at, "pull request created date"),
+      updatedAt: date(source.updated_at, "pull request updated date"),
+      closedAt: nullableDate(source.closed_at, "pull request closed date"),
+      mergedAt: nullableDate(source.merged_at, "pull request merged date"),
+      htmlUrl: string(source.html_url, "pull request URL"),
+    };
+  });
 }
