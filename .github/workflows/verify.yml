@@ -59,6 +59,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Show Prettier diff for auth work
+        run: |
+          pnpm exec prettier --write \
+            apps/web/src/app/api/account/delete/route.ts \
+            apps/web/src/app/api/auth/github/callback/route.ts \
+            apps/web/src/app/api/saved/[id]/route.ts \
+            apps/web/src/app/api/saved/route.ts \
+            apps/web/src/lib/auth.test.ts \
+            apps/web/src/lib/auth.ts \
+            apps/web/src/lib/database.ts
+          git diff -- \
+            apps/web/src/app/api/account/delete/route.ts \
+            apps/web/src/app/api/auth/github/callback/route.ts \
+            apps/web/src/app/api/saved/[id]/route.ts \
+            apps/web/src/app/api/saved/route.ts \
+            apps/web/src/lib/auth.test.ts \
+            apps/web/src/lib/auth.ts \
+            apps/web/src/lib/database.ts
+
       - name: Verify formatting, lint, types, tests, and build
         run: pnpm verify
 
