@@ -57,6 +57,8 @@ importers:
 
   packages/responsiveness-analyzer: {}
 
+  packages/scoring-engine: {}
+
   packages/github-client:
     dependencies:
       '@opportunity-radar/domain':
