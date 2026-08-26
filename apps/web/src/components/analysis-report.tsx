@@ -62,7 +62,12 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
           <h2 id="report-title">
             {report.repository} #{report.issueNumber}
           </h2>
-          <a className="report-issue-link" href={report.issueUrl} target="_blank" rel="noreferrer">
+          <a
+            className="report-issue-link"
+            href={report.issueUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
             {report.issueTitle}
             <span className="sr-only"> (opens on GitHub in a new tab)</span>
           </a>
@@ -108,12 +113,17 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
                 <p className="component-kicker">{Math.round(component.weight * 100)}% weight</p>
                 <h3>{component.label}</h3>
               </div>
-              <div className="component-score" aria-label={`${component.label} score ${component.score} out of 100`}>
+              <div
+                className="component-score"
+                aria-label={`${component.label} score ${component.score} out of 100`}
+              >
                 {component.score}
               </div>
             </header>
             <p className="component-reason">{component.reason}</p>
-            <p className="component-confidence">Confidence: {confidenceLabel(component.confidence)}</p>
+            <p className="component-confidence">
+              Confidence: {confidenceLabel(component.confidence)}
+            </p>
 
             <div className="evidence-columns">
               <section aria-labelledby={`${component.key}-facts`}>
@@ -126,10 +136,16 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
                       </span>
                       <span className="fact-meta">
                         {fact.freshnessDays !== undefined && (
-                          <span>{fact.freshnessDays === 0 ? "Current" : `${fact.freshnessDays}d old`}</span>
+                          <span>
+                            {fact.freshnessDays === 0 ? "Current" : `${fact.freshnessDays}d old`}
+                          </span>
                         )}
                         <a href={fact.sourceUrl} target="_blank" rel="noreferrer">
-                          Source<span className="sr-only"> for {fact.label} (opens in a new tab)</span>
+                          Source
+                          <span className="sr-only">
+                            {" "}
+                            for {fact.label} (opens in a new tab)
+                          </span>
                         </a>
                       </span>
                     </li>
@@ -137,10 +153,15 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
                 </ul>
               </section>
 
-              <section className="inference-panel" aria-labelledby={`${component.key}-inferences`}>
+              <section
+                className="inference-panel"
+                aria-labelledby={`${component.key}-inferences`}
+              >
                 <h4 id={`${component.key}-inferences`}>Inferences</h4>
                 {(component.inferences?.length ?? 0) === 0 ? (
-                  <p className="empty-evidence">No additional inference is needed for this component.</p>
+                  <p className="empty-evidence">
+                    No additional inference is needed for this component.
+                  </p>
                 ) : (
                   <ul className="inference-list">
                     {component.inferences?.map((inference) => (
@@ -155,7 +176,11 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
             </div>
 
             {(component.warnings?.length ?? 0) > 0 && (
-              <div className="component-warnings" role="note" aria-label={`${component.label} warnings`}>
+              <div
+                className="component-warnings"
+                role="note"
+                aria-label={`${component.label} warnings`}
+              >
                 <strong>Warnings</strong>
                 <ul>
                   {component.warnings?.map((warning) => <li key={warning}>{warning}</li>)}
@@ -171,10 +196,15 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
         {report.risks.length === 0 ? (
           <p>No material risk was identified from the available evidence.</p>
         ) : (
-          <ul>{report.risks.map((risk) => <li key={risk}>{risk}</li>)}</ul>
+          <ul>
+            {report.risks.map((risk) => (
+              <li key={risk}>{risk}</li>
+            ))}
+          </ul>
         )}
         <p className="report-disclaimer">
-          This report is decision support, not a guarantee of response, acceptance, payment, or completion time.
+          This report is decision support, not a guarantee of response, acceptance, payment, or
+          completion time.
         </p>
       </section>
     </section>
