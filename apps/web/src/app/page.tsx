@@ -1,7 +1,4 @@
-import {
-  AnalysisReport,
-  type AnalysisReportModel,
-} from "../components/analysis-report";
+import { AnalysisReport, type AnalysisReportModel } from "../components/analysis-report";
 import { IssueAnalyzer } from "../components/issue-analyzer";
 
 const signals = [
