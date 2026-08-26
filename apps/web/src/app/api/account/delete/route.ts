@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import {
-  CSRF_COOKIE,
-  SESSION_COOKIE,
-  decodeSession,
-  verifyCsrf,
-} from "../../../../lib/auth";
+import { CSRF_COOKIE, SESSION_COOKIE, decodeSession, verifyCsrf } from "../../../../lib/auth";
 import { deleteAccount } from "../../../../lib/database";
 
 export async function POST(request: NextRequest) {

@@ -112,7 +112,10 @@ export function buildGithubAuthorizeUrl(input: {
   return url.toString();
 }
 
-export function verifyCsrf(cookieToken: string | undefined, submittedToken: string | null): boolean {
+export function verifyCsrf(
+  cookieToken: string | undefined,
+  submittedToken: string | null,
+): boolean {
   if (!cookieToken || !submittedToken) return false;
   return constantTimeEqual(cookieToken, submittedToken);
 }

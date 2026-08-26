@@ -44,7 +44,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ item: saved }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "REPORT_NOT_OWNED") {
-      return NextResponse.json({ error: "Report does not belong to this account." }, { status: 403 });
+      return NextResponse.json(
+        { error: "Report does not belong to this account." },
+        { status: 403 },
+      );
     }
     throw error;
   }

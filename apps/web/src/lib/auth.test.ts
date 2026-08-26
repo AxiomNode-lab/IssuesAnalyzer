@@ -49,9 +49,7 @@ describe("authentication policies", () => {
 
   it("enforces server-side ownership", () => {
     expect(assertOwner(session, session.user.userId)).toBe(session);
-    expect(() => assertOwner(session, "22222222-2222-2222-2222-222222222222")).toThrow(
-      "FORBIDDEN",
-    );
+    expect(() => assertOwner(session, "22222222-2222-2222-2222-222222222222")).toThrow("FORBIDDEN");
     expect(() => assertOwner(null, session.user.userId)).toThrow("UNAUTHENTICATED");
   });
 });

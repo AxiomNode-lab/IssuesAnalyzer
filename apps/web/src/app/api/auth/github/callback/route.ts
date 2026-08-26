@@ -32,7 +32,12 @@ export async function GET(request: NextRequest) {
   const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code, redirect_uri: redirectUri }),
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      code,
+      redirect_uri: redirectUri,
+    }),
     cache: "no-store",
   });
   if (!tokenResponse.ok) {
@@ -58,7 +63,10 @@ export async function GET(request: NextRequest) {
 
   const githubUser = (await userResponse.json()) as GitHubUserResponse;
   if (!Number.isSafeInteger(githubUser.id) || !githubUser.login) {
-    return NextResponse.json({ error: "GitHub returned an invalid user identity." }, { status: 502 });
+    return NextResponse.json(
+      { error: "GitHub returned an invalid user identity." },
+      { status: 502 },
+    );
   }
 
   const persistedUser = await upsertGithubUser({

@@ -108,7 +108,10 @@ export async function saveOpportunity(input: {
   return rows[0];
 }
 
-export async function deleteSavedOpportunity(userId: string, savedOpportunityId: string): Promise<boolean> {
+export async function deleteSavedOpportunity(
+  userId: string,
+  savedOpportunityId: string,
+): Promise<boolean> {
   const sql = database();
   const deleted = await sql`
     DELETE FROM saved_opportunities
