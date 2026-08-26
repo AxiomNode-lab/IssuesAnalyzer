@@ -85,7 +85,9 @@ function decision(score: number): Decision {
 
 export function calculateOpportunityScore(input: OpportunityScoreInput): OpportunityScoreResult {
   if (input.components.length !== ORDER.length)
-    throw new TypeError("Exactly one activity, competition, and responsiveness component is required.");
+    throw new TypeError(
+      "Exactly one activity, competition, and responsiveness component is required.",
+    );
 
   const byKey = new Map<ComponentKey, ScoreComponentInput>();
   for (const component of input.components) {
@@ -128,7 +130,11 @@ export function calculateOpportunityScore(input: OpportunityScoreInput): Opportu
       assertNonEmpty(warning.evidenceKeys, `${warning.key} evidenceKeys`);
       if (warning.reason.trim().length === 0)
         throw new TypeError(`${warning.key} reason must not be empty.`);
-      return { ...warning, evidenceKeys: [...warning.evidenceKeys], scoreCap: HARD_WARNING_CAPS[warning.key] };
+      return {
+        ...warning,
+        evidenceKeys: [...warning.evidenceKeys],
+        scoreCap: HARD_WARNING_CAPS[warning.key],
+      };
     },
   );
   const scoreCap = hardWarningsApplied.reduce(
