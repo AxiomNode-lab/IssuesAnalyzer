@@ -221,4 +221,117 @@ describe("GitHubClient", () => {
     await expect(client.getIssue(reference)).resolves.toBeDefined();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("collects at most 100 recent commits and normalizes nested dates", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            sha: "abc123",
+            html_url: "https://github.com/octocat/Hello-World/commit/abc123",
+            commit: { committer: { date: "2026-08-20T10:00:00Z" } },
+          },
+        ]),
+        { status: 200 },
+      ),
+    );
+    const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
+
+    const result = await client.listRecentCommits(reference, { limit: 1_000 });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api.github.com/repos/octocat/Hello-World/commits?per_page=100",
+    );
+    expect(result.data).toEqual([
+      {
+        sha: "abc123",
+        htmlUrl: "https://github.com/octocat/Hello-World/commit/abc123",
+        committedAt: new Date("2026-08-20T10:00:00Z"),
+      },
+    ]);
+  });
+
+  it("collects at most 20 recent releases", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            id: 7,
+            tag_name: "v1.0.0",
+            html_url: "https://github.com/octocat/Hello-World/releases/tag/v1.0.0",
+            published_at: "2026-08-19T10:00:00Z",
+          },
+        ]),
+        { status: 200 },
+      ),
+    );
+    const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
+
+    const result = await client.listRecentReleases(reference, { limit: 200 });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api.github.com/repos/octocat/Hello-World/releases?per_page=20",
+    );
+    expect(result.data[0]?.publishedAt).toEqual(new Date("2026-08-19T10:00:00Z"));
+  });
+
+  it("normalizes repository community readiness without retaining upstream objects", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          health_percentage: 75,
+          files: {
+            contributing: { html_url: "https://github.com/example/contributing" },
+            code_of_conduct: null,
+            issue_template: { html_url: "https://github.com/example/issues" },
+            pull_request_template: null,
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
+
+    const result = await client.getCommunityProfile(reference);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api.github.com/repos/octocat/Hello-World/community/profile",
+    );
+    expect(result.data).toEqual({
+      healthPercentage: 75,
+      sourceUrl: "https://github.com/octocat/Hello-World/community",
+      contributingGuide: true,
+      codeOfConduct: false,
+      issueTemplate: true,
+      pullRequestTemplate: false,
+    });
+  });
+
+  it.each([
+    ["commits", () => new GitHubClient({
+      maxRetries: 0,
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify([{ sha: "abc", html_url: "https://github.com/x", commit: {} }]), {
+          status: 200,
+        }),
+      ),
+    }).listRecentCommits(reference)],
+    ["releases", () => new GitHubClient({
+      maxRetries: 0,
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify([{ id: 1, tag_name: "v1", html_url: "https://github.com/x", published_at: null }]), {
+          status: 200,
+        }),
+      ),
+    }).listRecentReleases(reference)],
+    ["community profile", () => new GitHubClient({
+      maxRetries: 0,
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify({ health_percentage: 101, files: {} }), { status: 200 }),
+      ),
+    }).getCommunityProfile(reference)],
+  ])("rejects malformed %s evidence", async (_name, request) => {
+    await expect(request()).rejects.toMatchObject({ kind: "invalid_payload" });
+  });
+
 });
