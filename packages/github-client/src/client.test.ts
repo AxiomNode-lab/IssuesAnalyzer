@@ -334,4 +334,108 @@ describe("GitHubClient", () => {
     await expect(request()).rejects.toMatchObject({ kind: "invalid_payload" });
   });
 
+
+  it("bounds issue timeline pagination to three pages", async () => {
+    const page = Array.from({ length: 100 }, (_, index) => ({
+      node_id: `event-${index}`,
+      event: "commented",
+      actor: null,
+      created_at: "2026-08-21T10:00:00Z",
+    }));
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response(JSON.stringify(page), { status: 200 }));
+    const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
+
+    const result = await client.listIssueTimeline(reference, { perPage: 1_000, maxPages: 50 });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/timeline?per_page=100&page=1");
+    expect(fetchMock.mock.calls[2]?.[0]).toContain("/timeline?per_page=100&page=3");
+    expect(result.data).toHaveLength(300);
+    expect(result.data[0]).toMatchObject({
+      event: "commented",
+      actor: null,
+      sourceUrl: reference.canonicalUrl,
+      createdAt: new Date("2026-08-21T10:00:00Z"),
+    });
+  });
+
+  it("collects at most 100 recently updated pull requests", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          {
+            id: 11,
+            number: 42,
+            title: "Fix the bug",
+            body: null,
+            state: "open",
+            draft: false,
+            user: { login: "contributor", html_url: "https://github.com/contributor" },
+            created_at: "2026-08-20T10:00:00Z",
+            updated_at: "2026-08-21T10:00:00Z",
+            closed_at: null,
+            merged_at: null,
+            html_url: "https://github.com/octocat/Hello-World/pull/42",
+          },
+        ]),
+        { status: 200 },
+      ),
+    );
+    const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
+
+    const result = await client.listRecentPullRequests(reference, { limit: 2_000 });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      "https://api.github.com/repos/octocat/Hello-World/pulls?state=all&sort=updated&direction=desc&per_page=100",
+    );
+    expect(result.data[0]).toMatchObject({
+      number: 42,
+      state: "open",
+      draft: false,
+      author: { login: "contributor" },
+    });
+  });
+
+  it("rejects malformed timeline and pull request evidence", async () => {
+    const timelineClient = new GitHubClient({
+      maxRetries: 0,
+      fetch: vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(JSON.stringify([{ event: "closed" }]), { status: 200 })),
+    });
+    const pullsClient = new GitHubClient({
+      maxRetries: 0,
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {
+              id: 1,
+              number: 2,
+              title: "Bad state",
+              body: null,
+              state: "unknown",
+              draft: false,
+              user: { login: "x", html_url: "https://github.com/x" },
+              created_at: "2026-08-20T10:00:00Z",
+              updated_at: "2026-08-20T10:00:00Z",
+              closed_at: null,
+              merged_at: null,
+              html_url: "https://github.com/octocat/Hello-World/pull/2",
+            },
+          ]),
+          { status: 200 },
+        ),
+      ),
+    });
+
+    await expect(timelineClient.listIssueTimeline(reference)).rejects.toMatchObject({
+      kind: "invalid_payload",
+    });
+    await expect(pullsClient.listRecentPullRequests(reference)).rejects.toMatchObject({
+      kind: "invalid_payload",
+    });
+  });
+
 });
