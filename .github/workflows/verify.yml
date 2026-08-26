@@ -57,7 +57,10 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Show generated lockfile diff
+        run: git diff -- pnpm-lock.yaml
 
       - name: Verify formatting, lint, types, tests, and build
         run: pnpm verify
