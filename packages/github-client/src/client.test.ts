@@ -36,8 +36,7 @@ function commentFixture(): Record<string, unknown> {
     user: { login: "reviewer", html_url: "https://github.com/reviewer" },
     created_at: "2026-08-01T10:00:00Z",
     updated_at: "2026-08-01T10:00:00Z",
-    html_url:
-      "https://github.com/octocat/Hello-World/issues/1347#issuecomment-9",
+    html_url: "https://github.com/octocat/Hello-World/issues/1347#issuecomment-9",
   };
 }
 
@@ -66,17 +65,11 @@ describe("GitHubClient", () => {
 
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0] ?? [];
-    expect(url).toBe(
-      "https://api.github.com/repos/octocat/Hello-World/issues/1347",
-    );
+    expect(url).toBe("https://api.github.com/repos/octocat/Hello-World/issues/1347");
     expect(init?.method).toBe("GET");
     expect(init?.redirect).toBe("error");
-    expect(new Headers(init?.headers).get("authorization")).toBe(
-      "Bearer secret-token",
-    );
-    expect(new Headers(init?.headers).get("x-github-api-version")).toBe(
-      "2026-03-10",
-    );
+    expect(new Headers(init?.headers).get("authorization")).toBe("Bearer secret-token");
+    expect(new Headers(init?.headers).get("x-github-api-version")).toBe("2026-03-10");
     expect(result.data.title).toBe("Found a bug");
     expect(result.data.createdAt).toEqual(new Date("2026-08-01T10:00:00Z"));
     expect(result.quota.remaining).toBe(4999);
@@ -93,9 +86,7 @@ describe("GitHubClient", () => {
   ])("classifies HTTP %s safely", async (status, headers, expectedKind) => {
     const client = new GitHubClient({
       maxRetries: 0,
-      fetch: vi
-        .fn<typeof fetch>()
-        .mockResolvedValue(new Response("{}", { status, headers })),
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(new Response("{}", { status, headers })),
     });
 
     await expect(client.getIssue(reference)).rejects.toMatchObject({
@@ -114,9 +105,7 @@ describe("GitHubClient", () => {
       maxRetries: 0,
       fetch: vi
         .fn<typeof fetch>()
-        .mockResolvedValue(
-          new Response(JSON.stringify(payload), { status: 200 }),
-        ),
+        .mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 })),
     });
 
     await expect(client.getIssue(reference)).rejects.toMatchObject({
@@ -144,15 +133,11 @@ describe("GitHubClient", () => {
   it("classifies network and timeout failures", async () => {
     const networkClient = new GitHubClient({
       maxRetries: 0,
-      fetch: vi
-        .fn<typeof fetch>()
-        .mockRejectedValue(new TypeError("connection failed")),
+      fetch: vi.fn<typeof fetch>().mockRejectedValue(new TypeError("connection failed")),
     });
     const timeoutClient = new GitHubClient({
       maxRetries: 0,
-      fetch: vi
-        .fn<typeof fetch>()
-        .mockRejectedValue(new DOMException("deadline", "TimeoutError")),
+      fetch: vi.fn<typeof fetch>().mockRejectedValue(new DOMException("deadline", "TimeoutError")),
     });
 
     await expect(networkClient.getIssue(reference)).rejects.toMatchObject({
@@ -167,8 +152,7 @@ describe("GitHubClient", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockImplementation(
-        async () =>
-          new Response(JSON.stringify([commentFixture()]), { status: 200 }),
+        async () => new Response(JSON.stringify([commentFixture()]), { status: 200 }),
       );
     const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
 
@@ -191,9 +175,7 @@ describe("GitHubClient", () => {
     const fullPage = Array.from({ length: 100 }, commentFixture);
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockImplementation(
-        async () => new Response(JSON.stringify(fullPage), { status: 200 }),
-      );
+      .mockImplementation(async () => new Response(JSON.stringify(fullPage), { status: 200 }));
     const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
 
     const result = await client.listIssueComments(reference, {
@@ -221,9 +203,7 @@ describe("GitHubClient", () => {
   it("rejects a malformed comment-page payload", async () => {
     const client = new GitHubClient({
       maxRetries: 0,
-      fetch: vi
-        .fn<typeof fetch>()
-        .mockResolvedValue(new Response("{}", { status: 200 })),
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(new Response("{}", { status: 200 })),
     });
 
     await expect(client.listIssueComments(reference)).rejects.toMatchObject({
@@ -234,12 +214,8 @@ describe("GitHubClient", () => {
   it("returns a classified error instead of partial comments when a later page fails", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify([commentFixture()]), { status: 200 }),
-      )
-      .mockResolvedValueOnce(
-        new Response("{}", { status: 429, headers: { "retry-after": "30" } }),
-      );
+      .mockResolvedValueOnce(new Response(JSON.stringify([commentFixture()]), { status: 200 }))
+      .mockResolvedValueOnce(new Response("{}", { status: 429, headers: { "retry-after": "30" } }));
     const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
 
     await expect(
@@ -256,9 +232,7 @@ describe("GitHubClient", () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response("{}", { status: 503 }))
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify(issueFixture()), { status: 200 }),
-      );
+      .mockResolvedValueOnce(new Response(JSON.stringify(issueFixture()), { status: 200 }));
     const client = new GitHubClient({ fetch: fetchMock, maxRetries: 1 });
 
     await expect(client.getIssue(reference)).resolves.toBeDefined();
@@ -301,8 +275,7 @@ describe("GitHubClient", () => {
           {
             id: 7,
             tag_name: "v1.0.0",
-            html_url:
-              "https://github.com/octocat/Hello-World/releases/tag/v1.0.0",
+            html_url: "https://github.com/octocat/Hello-World/releases/tag/v1.0.0",
             published_at: "2026-08-19T10:00:00Z",
           },
         ]),
@@ -316,9 +289,7 @@ describe("GitHubClient", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       "https://api.github.com/repos/octocat/Hello-World/releases?per_page=20",
     );
-    expect(result.data[0]?.publishedAt).toEqual(
-      new Date("2026-08-19T10:00:00Z"),
-    );
+    expect(result.data[0]?.publishedAt).toEqual(new Date("2026-08-19T10:00:00Z"));
   });
 
   it("normalizes repository community readiness without retaining upstream objects", async () => {
@@ -363,9 +334,7 @@ describe("GitHubClient", () => {
           maxRetries: 0,
           fetch: vi.fn<typeof fetch>().mockResolvedValue(
             new Response(
-              JSON.stringify([
-                { sha: "abc", html_url: "https://github.com/x", commit: {} },
-              ]),
+              JSON.stringify([{ sha: "abc", html_url: "https://github.com/x", commit: {} }]),
               {
                 status: 200,
               },
@@ -403,10 +372,7 @@ describe("GitHubClient", () => {
           fetch: vi
             .fn<typeof fetch>()
             .mockResolvedValue(
-              new Response(
-                JSON.stringify({ health_percentage: 101, files: {} }),
-                { status: 200 },
-              ),
+              new Response(JSON.stringify({ health_percentage: 101, files: {} }), { status: 200 }),
             ),
         }).getCommunityProfile(reference),
     ],
@@ -423,9 +389,7 @@ describe("GitHubClient", () => {
     }));
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockImplementation(
-        async () => new Response(JSON.stringify(page), { status: 200 }),
-      );
+      .mockImplementation(async () => new Response(JSON.stringify(page), { status: 200 }));
     const client = new GitHubClient({ fetch: fetchMock, maxRetries: 0 });
 
     const result = await client.listIssueTimeline(reference, {
@@ -434,12 +398,8 @@ describe("GitHubClient", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(fetchMock.mock.calls[0]?.[0]).toContain(
-      "/timeline?per_page=100&page=1",
-    );
-    expect(fetchMock.mock.calls[2]?.[0]).toContain(
-      "/timeline?per_page=100&page=3",
-    );
+    expect(fetchMock.mock.calls[0]?.[0]).toContain("/timeline?per_page=100&page=1");
+    expect(fetchMock.mock.calls[2]?.[0]).toContain("/timeline?per_page=100&page=3");
     expect(result.data).toHaveLength(300);
     expect(result.data[0]).toMatchObject({
       event: "commented",
@@ -496,9 +456,7 @@ describe("GitHubClient", () => {
       maxRetries: 0,
       fetch: vi
         .fn<typeof fetch>()
-        .mockResolvedValue(
-          new Response(JSON.stringify([{ event: "closed" }]), { status: 200 }),
-        ),
+        .mockResolvedValue(new Response(JSON.stringify([{ event: "closed" }]), { status: 200 })),
     });
     const pullsClient = new GitHubClient({
       maxRetries: 0,
@@ -525,14 +483,10 @@ describe("GitHubClient", () => {
       ),
     });
 
-    await expect(
-      timelineClient.listIssueTimeline(reference),
-    ).rejects.toMatchObject({
+    await expect(timelineClient.listIssueTimeline(reference)).rejects.toMatchObject({
       kind: "invalid_payload",
     });
-    await expect(
-      pullsClient.listRecentPullRequests(reference),
-    ).rejects.toMatchObject({
+    await expect(pullsClient.listRecentPullRequests(reference)).rejects.toMatchObject({
       kind: "invalid_payload",
     });
   });
