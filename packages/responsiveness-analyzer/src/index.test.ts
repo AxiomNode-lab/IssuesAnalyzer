@@ -11,7 +11,7 @@ const asOf = new Date("2026-08-26T00:00:00.000Z");
 const repositoryUrl = "https://github.com/example/project";
 
 function interaction(
-  hoursAfterOpen: number,
+  _hoursAfterOpen: number,
   overrides: Partial<InteractionEvidence> = {},
 ): InteractionEvidence {
   return {
