@@ -62,12 +62,7 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
           <h2 id="report-title">
             {report.repository} #{report.issueNumber}
           </h2>
-          <a
-            className="report-issue-link"
-            href={report.issueUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a className="report-issue-link" href={report.issueUrl} target="_blank" rel="noreferrer">
             {report.issueTitle}
             <span className="sr-only"> (opens on GitHub in a new tab)</span>
           </a>
@@ -153,10 +148,7 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
                 </ul>
               </section>
 
-              <section
-                className="inference-panel"
-                aria-labelledby={`${component.key}-inferences`}
-              >
+              <section className="inference-panel" aria-labelledby={`${component.key}-inferences`}>
                 <h4 id={`${component.key}-inferences`}>Inferences</h4>
                 {(component.inferences?.length ?? 0) === 0 ? (
                   <p className="empty-evidence">
