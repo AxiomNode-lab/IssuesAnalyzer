@@ -137,10 +137,7 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
                         )}
                         <a href={fact.sourceUrl} target="_blank" rel="noreferrer">
                           Source
-                          <span className="sr-only">
-                            {" "}
-                            for {fact.label} (opens in a new tab)
-                          </span>
+                          <span className="sr-only"> for {fact.label} (opens in a new tab)</span>
                         </a>
                       </span>
                     </li>
@@ -175,7 +172,9 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
               >
                 <strong>Warnings</strong>
                 <ul>
-                  {component.warnings?.map((warning) => <li key={warning}>{warning}</li>)}
+                  {component.warnings?.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
                 </ul>
               </div>
             )}
