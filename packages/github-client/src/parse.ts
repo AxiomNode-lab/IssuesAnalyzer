@@ -77,7 +77,7 @@ function nullableActor(value: unknown): GitHubActor | null {
   return value === null ? null : actor(value);
 }
 
-function filePresent(value: unknown, field: string): boolean {
+function filePresent(value: unknown): boolean {
   if (value === null) return false;
   object(value);
   return true;
@@ -197,10 +197,10 @@ export function parseCommunityProfile(value: unknown, sourceUrl: string): GitHub
   return {
     healthPercentage: percentage(source.health_percentage, "community health percentage"),
     sourceUrl,
-    contributingGuide: filePresent(files.contributing, "contributing guide"),
-    codeOfConduct: filePresent(files.code_of_conduct, "code of conduct"),
-    issueTemplate: filePresent(files.issue_template, "issue template"),
-    pullRequestTemplate: filePresent(files.pull_request_template, "pull request template"),
+    contributingGuide: filePresent(files.contributing),
+    codeOfConduct: filePresent(files.code_of_conduct),
+    issueTemplate: filePresent(files.issue_template),
+    pullRequestTemplate: filePresent(files.pull_request_template),
   };
 }
 
