@@ -55,6 +55,8 @@ importers:
 
   packages/domain: {}
 
+  packages/responsiveness-analyzer: {}
+
   packages/github-client:
     dependencies:
       '@opportunity-radar/domain':
