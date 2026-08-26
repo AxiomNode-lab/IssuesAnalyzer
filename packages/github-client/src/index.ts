@@ -6,6 +6,8 @@ export type {
   GitHubCommunityProfile,
   GitHubIssue,
   GitHubIssueComment,
+  GitHubIssueEvent,
+  GitHubPullRequestEvidence,
   GitHubQuota,
   GitHubReleaseEvidence,
   GitHubRepository,
