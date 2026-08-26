@@ -59,7 +59,7 @@ describe("calculateOpportunityScore", () => {
 
   it("is deterministic and does not mutate input", () => {
     const source = input(73, 41, 62);
-    const snapshot = structuredClone(source);
+    const snapshot = JSON.parse(JSON.stringify(source)) as OpportunityScoreInput;
     expect(calculateOpportunityScore(source)).toEqual(calculateOpportunityScore(source));
     expect(source).toEqual(snapshot);
   });
