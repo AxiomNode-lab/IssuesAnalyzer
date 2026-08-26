@@ -86,9 +86,7 @@ function confidence(
   return { level: value >= 75 ? "high" : value >= 45 ? "medium" : "low", value };
 }
 
-export function analyzeMaintainerResponsiveness(
-  input: ResponsivenessInput,
-): ResponsivenessResult {
+export function analyzeMaintainerResponsiveness(input: ResponsivenessInput): ResponsivenessResult {
   validDate(input.asOf, "asOf");
 
   if (input.threads === null) {
@@ -202,13 +200,7 @@ export function analyzeMaintainerResponsiveness(
           ? "mixed"
           : "slow";
   const score =
-    status === "insufficient"
-      ? 50
-      : status === "responsive"
-        ? 85
-        : status === "mixed"
-          ? 60
-          : 25;
+    status === "insufficient" ? 50 : status === "responsive" ? 85 : status === "mixed" ? 60 : 25;
   const inferences: ResponsivenessInference[] =
     status === "insufficient"
       ? []
