@@ -1,0 +1,9 @@
+{
+  "name": "@opportunity-radar/database",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "db:migrate": "sh ./scripts/migrate.sh",
+    "test:integration": "sh ./scripts/test-integration.sh"
+  }
+}
