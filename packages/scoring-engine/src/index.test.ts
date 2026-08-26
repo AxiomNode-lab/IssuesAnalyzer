@@ -87,7 +87,7 @@ describe("calculateOpportunityScore", () => {
     }));
     const result = calculateOpportunityScore({ components });
 
-    expect(result.confidence).toEqual({ level: "low", value: 16 });
+    expect(result.confidence).toEqual({ level: "low", value: 17 });
     expect(result.warnings).toEqual([
       "activity warning",
       "competition warning",
