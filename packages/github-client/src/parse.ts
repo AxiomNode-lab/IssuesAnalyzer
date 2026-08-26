@@ -1,5 +1,13 @@
 import { GitHubClientError } from "./errors";
-import type { GitHubActor, GitHubIssue, GitHubIssueComment, GitHubRepository } from "./types";
+import type {
+  GitHubActor,
+  GitHubCommitEvidence,
+  GitHubCommunityProfile,
+  GitHubIssue,
+  GitHubIssueComment,
+  GitHubReleaseEvidence,
+  GitHubRepository,
+} from "./types";
 
 type JsonObject = Record<string, unknown>;
 
@@ -22,6 +30,14 @@ function number(value: unknown, field: string): number {
     throw new GitHubClientError("invalid_payload", `GitHub returned an invalid ${field}.`);
   }
   return value;
+}
+
+function percentage(value: unknown, field: string): number {
+  const parsed = number(value, field);
+  if (parsed > 100) {
+    throw new GitHubClientError("invalid_payload", `GitHub returned an invalid ${field}.`);
+  }
+  return parsed;
 }
 
 function boolean(value: unknown, field: string): boolean {
@@ -53,6 +69,12 @@ function actor(value: unknown): GitHubActor {
     login: string(source.login, "actor login"),
     profileUrl: string(source.html_url, "actor profile URL"),
   };
+}
+
+function filePresent(value: unknown, field: string): boolean {
+  if (value === null) return false;
+  object(value);
+  return true;
 }
 
 export function parseIssue(value: unknown): GitHubIssue {
@@ -127,5 +149,54 @@ export function parseRepository(value: unknown): GitHubRepository {
     createdAt: date(source.created_at, "created date"),
     updatedAt: date(source.updated_at, "updated date"),
     pushedAt: nullableDate(source.pushed_at, "pushed date"),
+  };
+}
+
+export function parseCommitPage(value: unknown): readonly GitHubCommitEvidence[] {
+  if (!Array.isArray(value)) {
+    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid commit page.");
+  }
+
+  return value.map((entry) => {
+    const source = object(entry);
+    const commit = object(source.commit);
+    const committer = object(commit.committer);
+    return {
+      sha: string(source.sha, "commit SHA"),
+      htmlUrl: string(source.html_url, "commit URL"),
+      committedAt: date(committer.date, "commit date"),
+    };
+  });
+}
+
+export function parseReleasePage(value: unknown): readonly GitHubReleaseEvidence[] {
+  if (!Array.isArray(value)) {
+    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid release page.");
+  }
+
+  return value.map((entry) => {
+    const source = object(entry);
+    return {
+      id: number(source.id, "release id"),
+      tagName: string(source.tag_name, "release tag"),
+      htmlUrl: string(source.html_url, "release URL"),
+      publishedAt: date(source.published_at, "release published date"),
+    };
+  });
+}
+
+export function parseCommunityProfile(
+  value: unknown,
+  sourceUrl: string,
+): GitHubCommunityProfile {
+  const source = object(value);
+  const files = object(source.files);
+  return {
+    healthPercentage: percentage(source.health_percentage, "community health percentage"),
+    sourceUrl,
+    contributingGuide: filePresent(files.contributing, "contributing guide"),
+    codeOfConduct: filePresent(files.code_of_conduct, "code of conduct"),
+    issueTemplate: filePresent(files.issue_template, "issue template"),
+    pullRequestTemplate: filePresent(files.pull_request_template, "pull request template"),
   };
 }
