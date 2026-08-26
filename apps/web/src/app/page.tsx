@@ -1,4 +1,7 @@
-import { AnalysisReport, type AnalysisReportModel } from "../components/analysis-report";
+import {
+  AnalysisReport,
+  type AnalysisReportModel,
+} from "../components/analysis-report";
 import { IssueAnalyzer } from "../components/issue-analyzer";
 
 const signals = [
@@ -73,7 +76,8 @@ const previewReport: AnalysisReportModel = {
         {
           label: "Competition signal",
           value: "Low visible competition",
-          caution: "Absence of visible signals is not proof that no one else is working on the issue.",
+          caution:
+            "Absence of visible signals is not proof that no one else is working on the issue.",
         },
       ],
     },
@@ -105,7 +109,9 @@ export default function Home() {
       </a>
       <header className="site-header">
         <a className="brand" href="/" aria-label="GitHub Opportunity Radar home">
-          <span className="brand-mark" aria-hidden="true">⌁</span>
+          <span className="brand-mark" aria-hidden="true">
+            ⌁
+          </span>
           <span>Opportunity Radar</span>
         </a>
         <span className="version">MVP v0.1</span>
@@ -130,7 +136,9 @@ export default function Home() {
           <div className="signal-grid">
             {signals.map(([title, description], index) => (
               <article className="signal-card" key={title}>
-                <span className="index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+                <span className="index" aria-hidden="true">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
                 <h3>{title}</h3>
                 <p>{description}</p>
               </article>
@@ -143,8 +151,8 @@ export default function Home() {
             <p className="eyebrow">Report preview</p>
             <h2 id="preview-heading">Facts stay facts. Inferences stay labeled.</h2>
             <p>
-              This example uses illustrative data only. Live GitHub evidence will replace it when the
-              analysis orchestration endpoint is connected.
+              This example uses illustrative data only. Live GitHub evidence will replace it when
+              the analysis orchestration endpoint is connected.
             </p>
           </div>
           <AnalysisReport report={previewReport} />
