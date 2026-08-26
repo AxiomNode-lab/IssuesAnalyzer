@@ -8,6 +8,7 @@ import {
   randomToken,
   type Session,
 } from "../../../../../lib/auth";
+import { upsertGithubUser } from "../../../../../lib/database";
 
 type GitHubTokenResponse = { access_token?: string; error?: string };
 type GitHubUserResponse = { id?: number; login?: string; avatar_url?: string };
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
   const clientId = process.env.GITHUB_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET;
   const sessionSecret = process.env.SESSION_SECRET;
-  if (!clientId || !clientSecret || !sessionSecret) {
+  if (!clientId || !clientSecret || !sessionSecret || !process.env.DATABASE_URL) {
     return NextResponse.json({ error: "OAuth is not configured." }, { status: 503 });
   }
 
@@ -60,13 +61,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "GitHub returned an invalid user identity." }, { status: 502 });
   }
 
+  const persistedUser = await upsertGithubUser({
+    githubUserId: githubUser.id as number,
+    login: githubUser.login,
+    ...(githubUser.avatar_url ? { avatarUrl: githubUser.avatar_url } : {}),
+  });
   const now = Date.now();
   const session: Session = {
-    user: {
-      githubUserId: githubUser.id as number,
-      login: githubUser.login,
-      ...(githubUser.avatar_url ? { avatarUrl: githubUser.avatar_url } : {}),
-    },
+    user: persistedUser,
     issuedAt: now,
     expiresAt: now + 8 * 60 * 60 * 1000,
   };
