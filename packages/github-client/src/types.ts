@@ -53,6 +53,28 @@ export type GitHubRepository = Readonly<{
   pushedAt: Date | null;
 }>;
 
+export type GitHubCommitEvidence = Readonly<{
+  sha: string;
+  htmlUrl: string;
+  committedAt: Date;
+}>;
+
+export type GitHubReleaseEvidence = Readonly<{
+  id: number;
+  tagName: string;
+  htmlUrl: string;
+  publishedAt: Date;
+}>;
+
+export type GitHubCommunityProfile = Readonly<{
+  healthPercentage: number;
+  sourceUrl: string;
+  contributingGuide: boolean;
+  codeOfConduct: boolean;
+  issueTemplate: boolean;
+  pullRequestTemplate: boolean;
+}>;
+
 export type GitHubResponse<T> = Readonly<{
   data: T;
   quota: GitHubQuota;
