@@ -1,11 +1,21 @@
 import type { GitHubIssueUrl } from "@opportunity-radar/domain";
 
 import { GitHubClientError } from "./errors";
-import { parseIssue, parseIssueCommentPage, parseRepository } from "./parse";
+import {
+  parseCommitPage,
+  parseCommunityProfile,
+  parseIssue,
+  parseIssueCommentPage,
+  parseReleasePage,
+  parseRepository,
+} from "./parse";
 import type {
+  GitHubCommitEvidence,
+  GitHubCommunityProfile,
   GitHubIssue,
   GitHubIssueComment,
   GitHubQuota,
+  GitHubReleaseEvidence,
   GitHubRepository,
   GitHubResponse,
 } from "./types";
@@ -13,6 +23,8 @@ import type {
 const API_ORIGIN = "https://api.github.com";
 const API_VERSION = "2026-03-10";
 const RETRYABLE_STATUS = new Set([502, 503, 504]);
+
+type RepositoryReference = Pick<GitHubIssueUrl, "owner" | "repository">;
 
 export type GitHubClientOptions = Readonly<{
   token?: string;
@@ -25,6 +37,14 @@ function boundedInteger(value: string | null): number | null {
   if (value === null || !/^\d+$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function clamp(value: number | undefined, fallback: number, maximum: number): number {
+  return Math.min(Math.max(value ?? fallback, 1), maximum);
+}
+
+function repositoryPath(reference: RepositoryReference): string {
+  return `/repos/${encodeURIComponent(reference.owner)}/${encodeURIComponent(reference.repository)}`;
 }
 
 function quota(headers: Headers): GitHubQuota {
@@ -55,24 +75,21 @@ export class GitHubClient {
   }
 
   async getIssue(reference: GitHubIssueUrl): Promise<GitHubResponse<GitHubIssue>> {
-    return this.#get(
-      `/repos/${encodeURIComponent(reference.owner)}/${encodeURIComponent(reference.repository)}/issues/${reference.issueNumber}`,
-      parseIssue,
-    );
+    return this.#get(`${repositoryPath(reference)}/issues/${reference.issueNumber}`, parseIssue);
   }
 
   async listIssueComments(
     reference: GitHubIssueUrl,
     options: Readonly<{ perPage?: number; maxPages?: number }> = {},
   ): Promise<GitHubResponse<readonly GitHubIssueComment[]>> {
-    const perPage = Math.min(Math.max(options.perPage ?? 100, 1), 100);
-    const maxPages = Math.min(Math.max(options.maxPages ?? 3, 1), 5);
+    const perPage = clamp(options.perPage, 100, 100);
+    const maxPages = clamp(options.maxPages, 3, 5);
     const comments: GitHubIssueComment[] = [];
     let lastMetadata: Pick<GitHubResponse<unknown>, "quota" | "requestId"> | null = null;
 
     for (let page = 1; page <= maxPages; page += 1) {
       const response = await this.#get(
-        `/repos/${encodeURIComponent(reference.owner)}/${encodeURIComponent(reference.repository)}/issues/${reference.issueNumber}/comments?per_page=${perPage}&page=${page}`,
+        `${repositoryPath(reference)}/issues/${reference.issueNumber}/comments?per_page=${perPage}&page=${page}`,
         parseIssueCommentPage,
       );
       comments.push(...response.data);
@@ -93,11 +110,33 @@ export class GitHubClient {
   }
 
   async getRepository(
-    reference: Pick<GitHubIssueUrl, "owner" | "repository">,
+    reference: RepositoryReference,
   ): Promise<GitHubResponse<GitHubRepository>> {
-    return this.#get(
-      `/repos/${encodeURIComponent(reference.owner)}/${encodeURIComponent(reference.repository)}`,
-      parseRepository,
+    return this.#get(repositoryPath(reference), parseRepository);
+  }
+
+  async listRecentCommits(
+    reference: RepositoryReference,
+    options: Readonly<{ limit?: number }> = {},
+  ): Promise<GitHubResponse<readonly GitHubCommitEvidence[]>> {
+    const limit = clamp(options.limit, 100, 100);
+    return this.#get(`${repositoryPath(reference)}/commits?per_page=${limit}`, parseCommitPage);
+  }
+
+  async listRecentReleases(
+    reference: RepositoryReference,
+    options: Readonly<{ limit?: number }> = {},
+  ): Promise<GitHubResponse<readonly GitHubReleaseEvidence[]>> {
+    const limit = clamp(options.limit, 20, 20);
+    return this.#get(`${repositoryPath(reference)}/releases?per_page=${limit}`, parseReleasePage);
+  }
+
+  async getCommunityProfile(
+    reference: RepositoryReference,
+  ): Promise<GitHubResponse<GitHubCommunityProfile>> {
+    const sourceUrl = `https://github.com/${reference.owner}/${reference.repository}/community`;
+    return this.#get(`${repositoryPath(reference)}/community/profile`, (payload) =>
+      parseCommunityProfile(payload, sourceUrl),
     );
   }
 
