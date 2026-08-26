@@ -15,7 +15,10 @@ function component(
   return {
     key,
     score,
-    confidence: { level: confidence >= 75 ? "high" : confidence >= 45 ? "medium" : "low", value: confidence },
+    confidence: {
+      level: confidence >= 75 ? "high" : confidence >= 45 ? "medium" : "low",
+      value: confidence,
+    },
     evidenceKeys: [`${key}.evidence`],
     reason: `${key} reason`,
     warnings: [],
@@ -113,7 +116,11 @@ describe("calculateOpportunityScore", () => {
       ...input(100, 0, 100),
       hardWarnings: [
         { key: "issue_closed", evidenceKeys: ["issue.state"], reason: "Issue is closed." },
-        { key: "repository_archived", evidenceKeys: ["repository.archived"], reason: "Repository is archived." },
+        {
+          key: "repository_archived",
+          evidenceKeys: ["repository.archived"],
+          reason: "Repository is archived.",
+        },
       ],
     });
     expect(result.score).toBe(0);
