@@ -75,6 +75,29 @@ export type GitHubCommunityProfile = Readonly<{
   pullRequestTemplate: boolean;
 }>;
 
+export type GitHubIssueEvent = Readonly<{
+  nodeId: string;
+  event: string;
+  actor: GitHubActor | null;
+  createdAt: Date;
+  sourceUrl: string;
+}>;
+
+export type GitHubPullRequestEvidence = Readonly<{
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: "open" | "closed";
+  draft: boolean;
+  author: GitHubActor;
+  createdAt: Date;
+  updatedAt: Date;
+  closedAt: Date | null;
+  mergedAt: Date | null;
+  htmlUrl: string;
+}>;
+
 export type GitHubResponse<T> = Readonly<{
   data: T;
   quota: GitHubQuota;
