@@ -43,11 +43,7 @@ function boundedInteger(value: string | null): number | null {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
-function clamp(
-  value: number | undefined,
-  fallback: number,
-  maximum: number,
-): number {
+function clamp(value: number | undefined, fallback: number, maximum: number): number {
   return Math.min(Math.max(value ?? fallback, 1), maximum);
 }
 
@@ -77,21 +73,13 @@ export class GitHubClient {
 
   constructor(options: GitHubClientOptions = {}) {
     this.#token = options.token;
-    this.#timeoutMs = Math.min(
-      Math.max(options.timeoutMs ?? 8_000, 100),
-      30_000,
-    );
+    this.#timeoutMs = Math.min(Math.max(options.timeoutMs ?? 8_000, 100), 30_000);
     this.#maxRetries = Math.min(Math.max(options.maxRetries ?? 1, 0), 2);
     this.#fetch = options.fetch ?? globalThis.fetch;
   }
 
-  async getIssue(
-    reference: GitHubIssueUrl,
-  ): Promise<GitHubResponse<GitHubIssue>> {
-    return this.#get(
-      `${repositoryPath(reference)}/issues/${reference.issueNumber}`,
-      parseIssue,
-    );
+  async getIssue(reference: GitHubIssueUrl): Promise<GitHubResponse<GitHubIssue>> {
+    return this.#get(`${repositoryPath(reference)}/issues/${reference.issueNumber}`, parseIssue);
   }
 
   async listIssueComments(
@@ -101,10 +89,7 @@ export class GitHubClient {
     const perPage = clamp(options.perPage, 100, 100);
     const maxPages = clamp(options.maxPages, 3, 5);
     const comments: GitHubIssueComment[] = [];
-    let lastMetadata: Pick<
-      GitHubResponse<unknown>,
-      "quota" | "requestId"
-    > | null = null;
+    let lastMetadata: Pick<GitHubResponse<unknown>, "quota" | "requestId"> | null = null;
 
     for (let page = 1; page <= maxPages; page += 1) {
       const response = await this.#get(
@@ -128,9 +113,7 @@ export class GitHubClient {
     };
   }
 
-  async getRepository(
-    reference: RepositoryReference,
-  ): Promise<GitHubResponse<GitHubRepository>> {
+  async getRepository(reference: RepositoryReference): Promise<GitHubResponse<GitHubRepository>> {
     return this.#get(repositoryPath(reference), parseRepository);
   }
 
@@ -139,10 +122,7 @@ export class GitHubClient {
     options: Readonly<{ limit?: number }> = {},
   ): Promise<GitHubResponse<readonly GitHubCommitEvidence[]>> {
     const limit = clamp(options.limit, 100, 100);
-    return this.#get(
-      `${repositoryPath(reference)}/commits?per_page=${limit}`,
-      parseCommitPage,
-    );
+    return this.#get(`${repositoryPath(reference)}/commits?per_page=${limit}`, parseCommitPage);
   }
 
   async listRecentReleases(
@@ -150,19 +130,15 @@ export class GitHubClient {
     options: Readonly<{ limit?: number }> = {},
   ): Promise<GitHubResponse<readonly GitHubReleaseEvidence[]>> {
     const limit = clamp(options.limit, 20, 20);
-    return this.#get(
-      `${repositoryPath(reference)}/releases?per_page=${limit}`,
-      parseReleasePage,
-    );
+    return this.#get(`${repositoryPath(reference)}/releases?per_page=${limit}`, parseReleasePage);
   }
 
   async getCommunityProfile(
     reference: RepositoryReference,
   ): Promise<GitHubResponse<GitHubCommunityProfile>> {
     const sourceUrl = `https://github.com/${reference.owner}/${reference.repository}/community`;
-    return this.#get(
-      `${repositoryPath(reference)}/community/profile`,
-      (payload) => parseCommunityProfile(payload, sourceUrl),
+    return this.#get(`${repositoryPath(reference)}/community/profile`, (payload) =>
+      parseCommunityProfile(payload, sourceUrl),
     );
   }
 
@@ -174,10 +150,7 @@ export class GitHubClient {
     const maxPages = clamp(options.maxPages, 2, 3);
     const events: GitHubIssueEvent[] = [];
     const sourceUrl = reference.canonicalUrl;
-    let lastMetadata: Pick<
-      GitHubResponse<unknown>,
-      "quota" | "requestId"
-    > | null = null;
+    let lastMetadata: Pick<GitHubResponse<unknown>, "quota" | "requestId"> | null = null;
 
     for (let page = 1; page <= maxPages; page += 1) {
       const response = await this.#get(
@@ -212,17 +185,13 @@ export class GitHubClient {
     );
   }
 
-  async #get<T>(
-    path: string,
-    parse: (value: unknown) => T,
-  ): Promise<GitHubResponse<T>> {
+  async #get<T>(path: string, parse: (value: unknown) => T): Promise<GitHubResponse<T>> {
     const headers = new Headers({
       Accept: "application/vnd.github+json",
       "User-Agent": "github-opportunity-radar",
       "X-GitHub-Api-Version": API_VERSION,
     });
-    if (this.#token !== undefined)
-      headers.set("Authorization", `Bearer ${this.#token}`);
+    if (this.#token !== undefined) headers.set("Authorization", `Bearer ${this.#token}`);
 
     for (let attempt = 0; attempt <= this.#maxRetries; attempt += 1) {
       try {
@@ -235,11 +204,7 @@ export class GitHubClient {
 
         const requestId = response.headers.get("x-github-request-id");
         if (!response.ok) {
-          if (
-            RETRYABLE_STATUS.has(response.status) &&
-            attempt < this.#maxRetries
-          )
-            continue;
+          if (RETRYABLE_STATUS.has(response.status) && attempt < this.#maxRetries) continue;
           throw this.#httpError(response, requestId);
         }
 
@@ -247,15 +212,11 @@ export class GitHubClient {
         try {
           payload = await response.json();
         } catch (cause) {
-          throw new GitHubClientError(
-            "invalid_payload",
-            "GitHub returned invalid JSON.",
-            {
-              status: response.status,
-              requestId: requestId ?? undefined,
-              cause,
-            },
-          );
+          throw new GitHubClientError("invalid_payload", "GitHub returned invalid JSON.", {
+            status: response.status,
+            requestId: requestId ?? undefined,
+            cause,
+          });
         }
 
         return {
@@ -266,13 +227,9 @@ export class GitHubClient {
       } catch (error) {
         if (error instanceof GitHubClientError) throw error;
         if (error instanceof DOMException && error.name === "TimeoutError") {
-          throw new GitHubClientError(
-            "timeout",
-            "GitHub did not respond before the deadline.",
-            {
-              cause: error,
-            },
-          );
+          throw new GitHubClientError("timeout", "GitHub did not respond before the deadline.", {
+            cause: error,
+          });
         }
         if (attempt < this.#maxRetries) continue;
         throw new GitHubClientError("network", "GitHub could not be reached.", {
@@ -292,32 +249,15 @@ export class GitHubClient {
     };
 
     if (response.status === 404)
-      return new GitHubClientError(
-        "not_found",
-        "GitHub resource was not found.",
-        context,
-      );
+      return new GitHubClientError("not_found", "GitHub resource was not found.", context);
     if (
       response.status === 429 ||
-      (response.status === 403 &&
-        response.headers.get("x-ratelimit-remaining") === "0")
+      (response.status === 403 && response.headers.get("x-ratelimit-remaining") === "0")
     ) {
-      return new GitHubClientError(
-        "rate_limited",
-        "GitHub rate limit was reached.",
-        context,
-      );
+      return new GitHubClientError("rate_limited", "GitHub rate limit was reached.", context);
     }
     if (response.status === 403)
-      return new GitHubClientError(
-        "forbidden",
-        "GitHub denied access to the resource.",
-        context,
-      );
-    return new GitHubClientError(
-      "upstream",
-      "GitHub returned an unexpected response.",
-      context,
-    );
+      return new GitHubClientError("forbidden", "GitHub denied access to the resource.", context);
+    return new GitHubClientError("upstream", "GitHub returned an unexpected response.", context);
   }
 }
