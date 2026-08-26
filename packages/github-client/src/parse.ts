@@ -1,5 +1,15 @@
 import { GitHubClientError } from "./errors";
-import type { GitHubActor, GitHubIssue, GitHubIssueComment, GitHubRepository } from "./types";
+import type {
+  GitHubActor,
+  GitHubCommitEvidence,
+  GitHubCommunityProfile,
+  GitHubIssue,
+  GitHubIssueComment,
+  GitHubIssueEvent,
+  GitHubPullRequestEvidence,
+  GitHubReleaseEvidence,
+  GitHubRepository,
+} from "./types";
 
 type JsonObject = Record<string, unknown>;
 
@@ -22,6 +32,14 @@ function number(value: unknown, field: string): number {
     throw new GitHubClientError("invalid_payload", `GitHub returned an invalid ${field}.`);
   }
   return value;
+}
+
+function percentage(value: unknown, field: string): number {
+  const parsed = number(value, field);
+  if (parsed > 100) {
+    throw new GitHubClientError("invalid_payload", `GitHub returned an invalid ${field}.`);
+  }
+  return parsed;
 }
 
 function boolean(value: unknown, field: string): boolean {
@@ -53,6 +71,16 @@ function actor(value: unknown): GitHubActor {
     login: string(source.login, "actor login"),
     profileUrl: string(source.html_url, "actor profile URL"),
   };
+}
+
+function nullableActor(value: unknown): GitHubActor | null {
+  return value === null ? null : actor(value);
+}
+
+function filePresent(value: unknown): boolean {
+  if (value === null) return false;
+  object(value);
+  return true;
 }
 
 export function parseIssue(value: unknown): GitHubIssue {
@@ -128,4 +156,102 @@ export function parseRepository(value: unknown): GitHubRepository {
     updatedAt: date(source.updated_at, "updated date"),
     pushedAt: nullableDate(source.pushed_at, "pushed date"),
   };
+}
+
+export function parseCommitPage(value: unknown): readonly GitHubCommitEvidence[] {
+  if (!Array.isArray(value)) {
+    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid commit page.");
+  }
+
+  return value.map((entry) => {
+    const source = object(entry);
+    const commit = object(source.commit);
+    const committer = object(commit.committer);
+    return {
+      sha: string(source.sha, "commit SHA"),
+      htmlUrl: string(source.html_url, "commit URL"),
+      committedAt: date(committer.date, "commit date"),
+    };
+  });
+}
+
+export function parseReleasePage(value: unknown): readonly GitHubReleaseEvidence[] {
+  if (!Array.isArray(value)) {
+    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid release page.");
+  }
+
+  return value.map((entry) => {
+    const source = object(entry);
+    return {
+      id: number(source.id, "release id"),
+      tagName: string(source.tag_name, "release tag"),
+      htmlUrl: string(source.html_url, "release URL"),
+      publishedAt: date(source.published_at, "release published date"),
+    };
+  });
+}
+
+export function parseCommunityProfile(value: unknown, sourceUrl: string): GitHubCommunityProfile {
+  const source = object(value);
+  const files = object(source.files);
+  return {
+    healthPercentage: percentage(source.health_percentage, "community health percentage"),
+    sourceUrl,
+    contributingGuide: filePresent(files.contributing),
+    codeOfConduct: filePresent(files.code_of_conduct),
+    issueTemplate: filePresent(files.issue_template),
+    pullRequestTemplate: filePresent(files.pull_request_template),
+  };
+}
+
+export function parseIssueEventPage(
+  value: unknown,
+  sourceUrl: string,
+): readonly GitHubIssueEvent[] {
+  if (!Array.isArray(value)) {
+    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid timeline page.");
+  }
+
+  return value.map((entry) => {
+    const source = object(entry);
+    return {
+      nodeId: string(source.node_id, "timeline node id"),
+      event: string(source.event, "timeline event"),
+      actor: nullableActor(source.actor),
+      createdAt: date(source.created_at, "timeline event date"),
+      sourceUrl,
+    };
+  });
+}
+
+export function parsePullRequestPage(value: unknown): readonly GitHubPullRequestEvidence[] {
+  if (!Array.isArray(value)) {
+    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid pull request page.");
+  }
+
+  return value.map((entry) => {
+    const source = object(entry);
+    const state = string(source.state, "pull request state");
+    if (state !== "open" && state !== "closed") {
+      throw new GitHubClientError(
+        "invalid_payload",
+        "GitHub returned an invalid pull request state.",
+      );
+    }
+
+    return {
+      id: number(source.id, "pull request id"),
+      number: number(source.number, "pull request number"),
+      title: string(source.title, "pull request title"),
+      body: nullableString(source.body, "pull request body"),
+      state,
+      draft: boolean(source.draft, "pull request draft state"),
+      author: actor(source.user),
+      createdAt: date(source.created_at, "pull request created date"),
+      updatedAt: date(source.updated_at, "pull request updated date"),
+      closedAt: nullableDate(source.closed_at, "pull request closed date"),
+      mergedAt: nullableDate(source.merged_at, "pull request merged date"),
+      htmlUrl: string(source.html_url, "pull request URL"),
+    };
+  });
 }
