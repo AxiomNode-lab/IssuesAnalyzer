@@ -15,21 +15,30 @@ type JsonObject = Record<string, unknown>;
 
 function object(value: unknown): JsonObject {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid object.");
+    throw new GitHubClientError(
+      "invalid_payload",
+      "GitHub returned an invalid object.",
+    );
   }
   return value as JsonObject;
 }
 
 function string(value: unknown, field: string): string {
   if (typeof value !== "string") {
-    throw new GitHubClientError("invalid_payload", `GitHub returned an invalid ${field}.`);
+    throw new GitHubClientError(
+      "invalid_payload",
+      `GitHub returned an invalid ${field}.`,
+    );
   }
   return value;
 }
 
 function number(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-    throw new GitHubClientError("invalid_payload", `GitHub returned an invalid ${field}.`);
+    throw new GitHubClientError(
+      "invalid_payload",
+      `GitHub returned an invalid ${field}.`,
+    );
   }
   return value;
 }
@@ -37,14 +46,20 @@ function number(value: unknown, field: string): number {
 function percentage(value: unknown, field: string): number {
   const parsed = number(value, field);
   if (parsed > 100) {
-    throw new GitHubClientError("invalid_payload", `GitHub returned an invalid ${field}.`);
+    throw new GitHubClientError(
+      "invalid_payload",
+      `GitHub returned an invalid ${field}.`,
+    );
   }
   return parsed;
 }
 
 function boolean(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") {
-    throw new GitHubClientError("invalid_payload", `GitHub returned an invalid ${field}.`);
+    throw new GitHubClientError(
+      "invalid_payload",
+      `GitHub returned an invalid ${field}.`,
+    );
   }
   return value;
 }
@@ -56,7 +71,10 @@ function nullableString(value: unknown, field: string): string | null {
 function date(value: unknown, field: string): Date {
   const parsed = new Date(string(value, field));
   if (Number.isNaN(parsed.getTime())) {
-    throw new GitHubClientError("invalid_payload", `GitHub returned an invalid ${field}.`);
+    throw new GitHubClientError(
+      "invalid_payload",
+      `GitHub returned an invalid ${field}.`,
+    );
   }
   return parsed;
 }
@@ -94,11 +112,17 @@ export function parseIssue(value: unknown): GitHubIssue {
 
   const state = string(source.state, "issue state");
   if (state !== "open" && state !== "closed") {
-    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid issue state.");
+    throw new GitHubClientError(
+      "invalid_payload",
+      "GitHub returned an invalid issue state.",
+    );
   }
 
   if (!Array.isArray(source.labels) || !Array.isArray(source.assignees)) {
-    throw new GitHubClientError("invalid_payload", "GitHub returned invalid issue collections.");
+    throw new GitHubClientError(
+      "invalid_payload",
+      "GitHub returned invalid issue collections.",
+    );
   }
 
   return {
@@ -110,7 +134,9 @@ export function parseIssue(value: unknown): GitHubIssue {
     locked: boolean(source.locked, "locked state"),
     comments: number(source.comments, "comment count"),
     author: actor(source.user),
-    labels: source.labels.map((label) => string(object(label).name, "label name")),
+    labels: source.labels.map((label) =>
+      string(object(label).name, "label name"),
+    ),
     assignees: source.assignees.map(actor),
     createdAt: date(source.created_at, "created date"),
     updatedAt: date(source.updated_at, "updated date"),
@@ -131,9 +157,14 @@ export function parseIssueComment(value: unknown): GitHubIssueComment {
   };
 }
 
-export function parseIssueCommentPage(value: unknown): readonly GitHubIssueComment[] {
+export function parseIssueCommentPage(
+  value: unknown,
+): readonly GitHubIssueComment[] {
   if (!Array.isArray(value)) {
-    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid comment page.");
+    throw new GitHubClientError(
+      "invalid_payload",
+      "GitHub returned an invalid comment page.",
+    );
   }
   return value.map(parseIssueComment);
 }
@@ -158,9 +189,14 @@ export function parseRepository(value: unknown): GitHubRepository {
   };
 }
 
-export function parseCommitPage(value: unknown): readonly GitHubCommitEvidence[] {
+export function parseCommitPage(
+  value: unknown,
+): readonly GitHubCommitEvidence[] {
   if (!Array.isArray(value)) {
-    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid commit page.");
+    throw new GitHubClientError(
+      "invalid_payload",
+      "GitHub returned an invalid commit page.",
+    );
   }
 
   return value.map((entry) => {
@@ -175,9 +211,14 @@ export function parseCommitPage(value: unknown): readonly GitHubCommitEvidence[]
   });
 }
 
-export function parseReleasePage(value: unknown): readonly GitHubReleaseEvidence[] {
+export function parseReleasePage(
+  value: unknown,
+): readonly GitHubReleaseEvidence[] {
   if (!Array.isArray(value)) {
-    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid release page.");
+    throw new GitHubClientError(
+      "invalid_payload",
+      "GitHub returned an invalid release page.",
+    );
   }
 
   return value.map((entry) => {
@@ -198,12 +239,18 @@ export function parseCommunityProfile(
   const source = object(value);
   const files = object(source.files);
   return {
-    healthPercentage: percentage(source.health_percentage, "community health percentage"),
+    healthPercentage: percentage(
+      source.health_percentage,
+      "community health percentage",
+    ),
     sourceUrl,
     contributingGuide: filePresent(files.contributing, "contributing guide"),
     codeOfConduct: filePresent(files.code_of_conduct, "code of conduct"),
     issueTemplate: filePresent(files.issue_template, "issue template"),
-    pullRequestTemplate: filePresent(files.pull_request_template, "pull request template"),
+    pullRequestTemplate: filePresent(
+      files.pull_request_template,
+      "pull request template",
+    ),
   };
 }
 
@@ -212,7 +259,10 @@ export function parseIssueEventPage(
   sourceUrl: string,
 ): readonly GitHubIssueEvent[] {
   if (!Array.isArray(value)) {
-    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid timeline page.");
+    throw new GitHubClientError(
+      "invalid_payload",
+      "GitHub returned an invalid timeline page.",
+    );
   }
 
   return value.map((entry) => {
@@ -227,9 +277,14 @@ export function parseIssueEventPage(
   });
 }
 
-export function parsePullRequestPage(value: unknown): readonly GitHubPullRequestEvidence[] {
+export function parsePullRequestPage(
+  value: unknown,
+): readonly GitHubPullRequestEvidence[] {
   if (!Array.isArray(value)) {
-    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid pull request page.");
+    throw new GitHubClientError(
+      "invalid_payload",
+      "GitHub returned an invalid pull request page.",
+    );
   }
 
   return value.map((entry) => {
