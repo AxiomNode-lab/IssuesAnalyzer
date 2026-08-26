@@ -3,6 +3,7 @@ export const CSRF_COOKIE = "gor_csrf";
 export const OAUTH_STATE_COOKIE = "gor_oauth_state";
 
 export type SessionUser = Readonly<{
+  userId: string;
   githubUserId: number;
   login: string;
   avatarUrl?: string;
@@ -72,7 +73,9 @@ export async function decodeSession(
   try {
     const parsed = JSON.parse(new TextDecoder().decode(fromBase64Url(payload))) as Session;
     if (
-      typeof parsed.user?.githubUserId !== "number" ||
+      typeof parsed.user?.userId !== "string" ||
+      parsed.user.userId.length === 0 ||
+      typeof parsed.user.githubUserId !== "number" ||
       !Number.isSafeInteger(parsed.user.githubUserId) ||
       typeof parsed.user.login !== "string" ||
       parsed.user.login.length === 0 ||
@@ -114,8 +117,8 @@ export function verifyCsrf(cookieToken: string | undefined, submittedToken: stri
   return constantTimeEqual(cookieToken, submittedToken);
 }
 
-export function assertOwner(session: Session | null, ownerGithubUserId: number): Session {
+export function assertOwner(session: Session | null, ownerUserId: string): Session {
   if (!session) throw new Error("UNAUTHENTICATED");
-  if (session.user.githubUserId !== ownerGithubUserId) throw new Error("FORBIDDEN");
+  if (session.user.userId !== ownerUserId) throw new Error("FORBIDDEN");
   return session;
 }
