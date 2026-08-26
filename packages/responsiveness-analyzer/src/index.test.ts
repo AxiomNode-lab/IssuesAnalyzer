@@ -106,11 +106,7 @@ describe("analyzeMaintainerResponsiveness", () => {
     ];
     const result = analyzeMaintainerResponsiveness(
       input({
-        threads: [
-          thread(12, 1, ignored),
-          thread(24, 2, ignored),
-          thread(36, 3, ignored),
-        ],
+        threads: [thread(12, 1, ignored), thread(24, 2, ignored), thread(36, 3, ignored)],
       }),
     );
     expect(result.facts).toContainEqual(
