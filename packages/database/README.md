@@ -1,6 +1,6 @@
 # Database foundation
 
-This package owns the PostgreSQL schema and forward migrations for the MVP.
+This directory owns the PostgreSQL schema and forward migrations for the MVP.
 
 ## Local development
 
@@ -14,14 +14,14 @@ Apply the forward migration:
 
 ```bash
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/opportunity_radar \
-  pnpm --filter @opportunity-radar/database db:migrate
+  sh packages/database/scripts/migrate.sh
 ```
 
 Run the isolated integration test against a disposable database:
 
 ```bash
 TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/opportunity_radar_test \
-  pnpm --filter @opportunity-radar/database test:integration
+  sh packages/database/scripts/test-integration.sh
 ```
 
 The integration runner drops and recreates the `public` schema. Never point `TEST_DATABASE_URL` at a database containing data you need.
