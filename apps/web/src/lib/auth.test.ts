@@ -11,7 +11,7 @@ import {
 
 const secret = "a-secure-test-secret-that-is-at-least-32-characters";
 const session: Session = {
-  user: { githubUserId: 123, login: "octocat" },
+  user: { userId: "11111111-1111-1111-1111-111111111111", githubUserId: 123, login: "octocat" },
   issuedAt: 1_800_000_000_000,
   expiresAt: 1_800_003_600_000,
 };
@@ -48,8 +48,10 @@ describe("authentication policies", () => {
   });
 
   it("enforces server-side ownership", () => {
-    expect(assertOwner(session, 123)).toBe(session);
-    expect(() => assertOwner(session, 456)).toThrow("FORBIDDEN");
-    expect(() => assertOwner(null, 123)).toThrow("UNAUTHENTICATED");
+    expect(assertOwner(session, session.user.userId)).toBe(session);
+    expect(() => assertOwner(session, "22222222-2222-2222-2222-222222222222")).toThrow(
+      "FORBIDDEN",
+    );
+    expect(() => assertOwner(null, session.user.userId)).toThrow("UNAUTHENTICATED");
   });
 });
