@@ -214,3 +214,60 @@ BEGIN
     NULL;
   END;
 END $$;
+
+DO $$
+DECLARE
+  disposable_user uuid;
+  issue_one uuid;
+  disposable_report uuid;
+BEGIN
+  SELECT id INTO issue_one
+  FROM github_issues
+  WHERE repository_owner = 'owner'
+    AND repository_name = 'repo'
+    AND issue_number = 42;
+
+  INSERT INTO users (github_user_id, github_login)
+  VALUES (1003, 'delete-me')
+  RETURNING id INTO disposable_user;
+
+  INSERT INTO profiles (user_id, display_name)
+  VALUES (disposable_user, 'Delete Me');
+
+  INSERT INTO reports (
+    user_id,
+    github_issue_id,
+    score_model_version,
+    report_version,
+    score,
+    verdict,
+    confidence,
+    report_payload
+  ) VALUES (
+    disposable_user,
+    issue_one,
+    'opportunity-score-v1',
+    'report-v1',
+    50,
+    'review_carefully',
+    'medium',
+    '{}'::jsonb
+  ) RETURNING id INTO disposable_report;
+
+  INSERT INTO saved_opportunities (user_id, github_issue_id, latest_report_id)
+  VALUES (disposable_user, issue_one, disposable_report);
+
+  DELETE FROM users WHERE id = disposable_user;
+
+  IF EXISTS (SELECT 1 FROM profiles WHERE user_id = disposable_user) THEN
+    RAISE EXCEPTION 'profile was not deleted with account';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM saved_opportunities WHERE user_id = disposable_user) THEN
+    RAISE EXCEPTION 'saved opportunities were not deleted with account';
+  END IF;
+
+  IF (SELECT user_id FROM reports WHERE id = disposable_report) IS NOT NULL THEN
+    RAISE EXCEPTION 'historical report ownership was not anonymized on account deletion';
+  END IF;
+END $$;
