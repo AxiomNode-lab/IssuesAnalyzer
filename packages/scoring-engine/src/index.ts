@@ -119,24 +119,28 @@ export function calculateOpportunityScore(input: OpportunityScoreInput): Opportu
   });
 
   const uncappedScore = Math.round(
-    components.reduce((total, component) => total + component.normalizedScore * component.weight, 0),
+    components.reduce(
+      (total, component) => total + component.normalizedScore * component.weight,
+      0,
+    ),
   );
   const overallConfidence = Math.round(
-    components.reduce((total, component) => total + component.confidence.value * component.weight, 0),
+    components.reduce(
+      (total, component) => total + component.confidence.value * component.weight,
+      0,
+    ),
   );
 
-  const hardWarningsApplied = (input.hardWarnings ?? []).map(
-    (warning): AppliedHardWarning => {
-      assertNonEmpty(warning.evidenceKeys, `${warning.key} evidenceKeys`);
-      if (warning.reason.trim().length === 0)
-        throw new TypeError(`${warning.key} reason must not be empty.`);
-      return {
-        ...warning,
-        evidenceKeys: [...warning.evidenceKeys],
-        scoreCap: HARD_WARNING_CAPS[warning.key],
-      };
-    },
-  );
+  const hardWarningsApplied = (input.hardWarnings ?? []).map((warning): AppliedHardWarning => {
+    assertNonEmpty(warning.evidenceKeys, `${warning.key} evidenceKeys`);
+    if (warning.reason.trim().length === 0)
+      throw new TypeError(`${warning.key} reason must not be empty.`);
+    return {
+      ...warning,
+      evidenceKeys: [...warning.evidenceKeys],
+      scoreCap: HARD_WARNING_CAPS[warning.key],
+    };
+  });
   const scoreCap = hardWarningsApplied.reduce(
     (lowest, warning) => Math.min(lowest, warning.scoreCap),
     100,
