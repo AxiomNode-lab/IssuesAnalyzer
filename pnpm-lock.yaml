@@ -51,6 +51,8 @@ importers:
 
   packages/activity-analyzer: {}
 
+  packages/competition-analyzer: {}
+
   packages/domain: {}
 
   packages/github-client:
