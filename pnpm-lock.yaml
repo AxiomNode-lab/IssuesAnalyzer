@@ -49,6 +49,8 @@ importers:
         specifier: ^19.2.0
         version: 19.2.5(@types/react@19.2.18)
 
+  packages/activity-analyzer: {}
+
   packages/domain: {}
 
   packages/github-client:
