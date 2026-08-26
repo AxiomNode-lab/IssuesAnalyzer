@@ -187,7 +187,8 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
       value: linkedPullRequests.length,
       sourceUrl: latestLinked?.sourceUrl ?? input.issue.canonicalUrl,
       observedAt: input.asOf,
-      freshnessDays: latestLinked === undefined ? 0 : daysBetween(input.asOf, latestLinked.updatedAt),
+      freshnessDays:
+        latestLinked === undefined ? 0 : daysBetween(input.asOf, latestLinked.updatedAt),
     },
     {
       key: "competition.claimCommentCount",
