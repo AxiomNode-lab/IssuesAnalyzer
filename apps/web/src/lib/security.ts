@@ -1,5 +1,5 @@
-import { FixedWindowRateLimiter } from "@opportunity-radar/github-client";
 import type { NextRequest } from "next/server";
+import { FixedWindowRateLimiter } from "../../../../packages/github-client/src/resilience";
 
 const DEFAULT_MAX_BODY_BYTES = 32 * 1024;
 const SENSITIVE_KEY = /(?:authorization|cookie|csrf|secret|token|password|database|session)/i;
