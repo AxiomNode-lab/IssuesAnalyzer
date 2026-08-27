@@ -1,7 +1,13 @@
 import { runtimeConfig } from "./runtime-config";
 import { redactForLog } from "./security";
 
-type MetricKey = "request_latency_ms" | "cache_hit" | "cache_miss" | "github_quota_remaining";
+type MetricKey =
+  | "request_latency_ms"
+  | "cache_hit"
+  | "cache_miss"
+  | "github_quota_remaining"
+  | "analysis_success"
+  | "analysis_failure";
 
 type MetricState = {
   count: number;

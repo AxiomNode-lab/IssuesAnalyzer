@@ -34,6 +34,7 @@ function commentFixture(): Record<string, unknown> {
     id: 9,
     body: "A comment",
     user: { login: "reviewer", html_url: "https://github.com/reviewer" },
+    author_association: "MEMBER",
     created_at: "2026-08-01T10:00:00Z",
     updated_at: "2026-08-01T10:00:00Z",
     html_url: "https://github.com/octocat/Hello-World/issues/1347#issuecomment-9",
