@@ -41,9 +41,9 @@ describe("security hardening", () => {
 
   it("rejects oversized bodies before parsing JSON", async () => {
     const body = JSON.stringify({ value: "x".repeat(100) });
-    await expect(readBoundedJson(request("https://app.example/api", { method: "POST", body }), 32)).rejects.toThrow(
-      "BODY_TOO_LARGE",
-    );
+    await expect(
+      readBoundedJson(request("https://app.example/api", { method: "POST", body }), 32),
+    ).rejects.toThrow("BODY_TOO_LARGE");
   });
 
   it("accepts only safe GitHub-controlled HTTPS links", () => {
