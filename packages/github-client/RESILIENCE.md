@@ -12,12 +12,12 @@ Use `scopedCacheKey(scope, resource)` so identical resource names cannot collide
 
 `EVIDENCE_CACHE_POLICIES` defines the bounded defaults used by the resilience layer.
 
-| Evidence                                                      | Fresh  | Stale window |
-| ------------------------------------------------------------- | -----: | -----------: |
-| Issue metadata                                                |  2 min |       10 min |
-| Issue comments/timeline                                       |  2 min |       10 min |
-| Repository metadata/community profile                         | 10 min |       60 min |
-| Recent commits/releases/PR evidence                            |  5 min |       30 min |
+| Evidence                                                        |  Fresh | Stale window |
+| --------------------------------------------------------------- | -----: | -----------: |
+| Issue metadata                                                  |  2 min |       10 min |
+| Issue comments/timeline                                         |  2 min |       10 min |
+| Repository metadata/community profile                           | 10 min |       60 min |
+| Recent commits/releases/PR evidence                             |  5 min |       30 min |
 | Completed deterministic analysis from the same evidence version |  5 min |       30 min |
 
 `StaleWhileRevalidateCache` returns a fresh hit without contacting GitHub. A stale hit is returned immediately while one deduplicated refresh starts in the background. A cache miss waits for the single deduplicated load and then stores the result.
