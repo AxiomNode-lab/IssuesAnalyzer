@@ -62,6 +62,9 @@ jobs:
       - name: Verify formatting, lint, types, tests, and build
         run: pnpm verify
 
+      - name: Validate operational scripts
+        run: sh -n scripts/smoke-test.sh scripts/backup-postgres.sh scripts/restore-postgres.sh
+
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
 

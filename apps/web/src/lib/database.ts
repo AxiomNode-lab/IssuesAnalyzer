@@ -18,6 +18,11 @@ function database(): Sql {
   return client;
 }
 
+export async function checkDatabaseReadiness(): Promise<void> {
+  const sql = database();
+  await sql`SELECT 1 AS ready`;
+}
+
 export async function upsertGithubUser(input: {
   githubUserId: number;
   login: string;
