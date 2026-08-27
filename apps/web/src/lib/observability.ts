@@ -69,7 +69,10 @@ export function reportOperationalError(
   structuredLog("error", "operational_error", { ...context, error: normalized });
 }
 
-export async function observeLatency<T>(event: string, work: () => Promise<T>): Promise<T> {
+export async function observeLatency<T>(
+  event: string,
+  work: () => Promise<T>,
+): Promise<T> {
   const started = performance.now();
   try {
     return await work();
