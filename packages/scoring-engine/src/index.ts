@@ -4,7 +4,11 @@ export type ConfidenceLevel = "high" | "medium" | "low";
 export type ComponentKey = "activity" | "competition" | "responsiveness" | "actionability";
 export type Decision = "pursue" | "review_carefully" | "skip";
 export type HardWarningKey =
-  "repository_archived" | "repository_disabled" | "issue_closed" | "issue_low_actionability";
+  | "repository_archived"
+  | "repository_disabled"
+  | "issue_closed"
+  | "issue_low_actionability"
+  | "stale_opportunity_uncertain_maintainers";
 
 export type ScoreComponentInput = Readonly<{
   key: ComponentKey;
@@ -38,10 +42,7 @@ export type ScoreComponent = Readonly<{
   warnings: readonly string[];
 }>;
 
-export type AppliedHardWarning = HardWarningInput &
-  Readonly<{
-    scoreCap: number;
-  }>;
+export type AppliedHardWarning = HardWarningInput & Readonly<{ scoreCap: number }>;
 
 export type OpportunityScoreResult = Readonly<{
   version: typeof SCORE_VERSION;
@@ -55,23 +56,19 @@ export type OpportunityScoreResult = Readonly<{
   decisionReason: string;
 }>;
 
-const ORDER: readonly ComponentKey[] = [
-  "activity",
-  "competition",
-  "responsiveness",
-  "actionability",
-];
+const ORDER: readonly ComponentKey[] = ["activity", "competition", "responsiveness", "actionability"];
 const WEIGHTS: Readonly<Record<ComponentKey, number>> = {
-  activity: 0.2,
-  competition: 0.25,
-  responsiveness: 0.15,
-  actionability: 0.4,
+  activity: 0.25,
+  competition: 0.2,
+  responsiveness: 0.2,
+  actionability: 0.35,
 };
 const HARD_WARNING_CAPS: Readonly<Record<HardWarningKey, number>> = {
   repository_archived: 0,
   repository_disabled: 0,
   issue_closed: 20,
   issue_low_actionability: 39,
+  stale_opportunity_uncertain_maintainers: 69,
 };
 
 function assertScore(value: number, name: string): void {
@@ -92,27 +89,36 @@ function decision(score: number): Decision {
   return score >= 70 ? "pursue" : score >= 40 ? "review_carefully" : "skip";
 }
 
-function decisionReason(
-  result: Readonly<{
-    score: number;
-    components: readonly ScoreComponent[];
-    hardWarnings: readonly AppliedHardWarning[];
-  }>,
-): string {
-  const gate = result.hardWarnings.find((warning) => warning.key === "issue_low_actionability");
-  if (gate) return gate.reason;
+function decisionReason(result: Readonly<{
+  score: number;
+  components: readonly ScoreComponent[];
+  hardWarnings: readonly AppliedHardWarning[];
+}>): string {
+  const lowActionability = result.hardWarnings.find((warning) => warning.key === "issue_low_actionability");
+  if (lowActionability) return lowActionability.reason;
+  const staleGuard = result.hardWarnings.find(
+    (warning) => warning.key === "stale_opportunity_uncertain_maintainers",
+  );
+  if (staleGuard) return staleGuard.reason;
+
   const actionability = result.components.find((component) => component.key === "actionability")!;
   const competition = result.components.find((component) => component.key === "competition")!;
   const activity = result.components.find((component) => component.key === "activity")!;
+  const responsiveness = result.components.find((component) => component.key === "responsiveness")!;
+
   if (competition.rawScore >= 80)
     return "Active competing implementation work is visible; review it before investing effort.";
   if (result.score >= 70)
-    return "The repository is active, the issue appears actionable, and no strong active competition was detected.";
+    return "The issue appears actionable, repository activity is healthy, and no strong active competition was detected.";
   if (actionability.rawScore < 70)
     return "The issue is not yet clearly contribution-ready; confirm scope and implementation direction first.";
+  if (activity.rawScore < 50 && responsiveness.confidence.level === "low")
+    return "The issue appears actionable, but repository activity is weak and maintainer-response evidence is limited.";
   if (activity.rawScore < 50)
-    return "The issue may be actionable, but repository activity is weak or uncertain.";
-  return "The available evidence is mixed; review the highlighted risks before starting work.";
+    return "The issue appears actionable, but repository activity is weak or stale.";
+  if (responsiveness.confidence.level === "low")
+    return "The issue appears actionable, but maintainer-response evidence is too limited for a strong recommendation.";
+  return "The available evidence supports caution before starting work.";
 }
 
 export function calculateOpportunityScore(input: OpportunityScoreInput): OpportunityScoreResult {
@@ -151,34 +157,23 @@ export function calculateOpportunityScore(input: OpportunityScoreInput): Opportu
   });
 
   const uncappedScore = Math.round(
-    components.reduce(
-      (total, component) => total + component.normalizedScore * component.weight,
-      0,
-    ),
+    components.reduce((total, component) => total + component.normalizedScore * component.weight, 0),
   );
   const overallConfidence = Math.round(
-    components.reduce(
-      (total, component) => total + component.confidence.value * component.weight,
-      0,
-    ),
+    components.reduce((total, component) => total + component.confidence.value * component.weight, 0),
   );
 
   const hardWarningsApplied = (input.hardWarnings ?? []).map((warning): AppliedHardWarning => {
     assertNonEmpty(warning.evidenceKeys, `${warning.key} evidenceKeys`);
     if (warning.reason.trim().length === 0)
       throw new TypeError(`${warning.key} reason must not be empty.`);
-    return {
-      ...warning,
-      evidenceKeys: [...warning.evidenceKeys],
-      scoreCap: HARD_WARNING_CAPS[warning.key],
-    };
+    return { ...warning, evidenceKeys: [...warning.evidenceKeys], scoreCap: HARD_WARNING_CAPS[warning.key] };
   });
   const scoreCap = hardWarningsApplied.reduce(
     (lowest, warning) => Math.min(lowest, warning.scoreCap),
     100,
   );
   const score = Math.min(uncappedScore, scoreCap);
-  const explanation = decisionReason({ score, components, hardWarnings: hardWarningsApplied });
 
   return {
     version: SCORE_VERSION,
@@ -189,6 +184,6 @@ export function calculateOpportunityScore(input: OpportunityScoreInput): Opportu
     components,
     warnings: components.flatMap((component) => component.warnings),
     hardWarningsApplied,
-    decisionReason: explanation,
+    decisionReason: decisionReason({ score, components, hardWarnings: hardWarningsApplied }),
   };
 }
