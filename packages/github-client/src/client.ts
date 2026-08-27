@@ -7,6 +7,7 @@ import {
   parseIssue,
   parseIssueCommentPage,
   parseIssueEventPage,
+  parseIssuePage,
   parsePullRequestPage,
   parseReleasePage,
   parseRepository,
@@ -86,14 +87,24 @@ export class GitHubClient {
     reference: GitHubIssueUrl,
     options: Readonly<{ perPage?: number; maxPages?: number }> = {},
   ): Promise<GitHubResponse<readonly GitHubIssueComment[]>> {
+    return this.listIssueCommentsByNumber(reference, reference.issueNumber, options);
+  }
+
+  async listIssueCommentsByNumber(
+    reference: RepositoryReference,
+    issueNumber: number,
+    options: Readonly<{ perPage?: number; maxPages?: number }> = {},
+  ): Promise<GitHubResponse<readonly GitHubIssueComment[]>> {
+    if (!Number.isSafeInteger(issueNumber) || issueNumber < 1)
+      throw new RangeError("issueNumber must be a positive integer.");
     const perPage = clamp(options.perPage, 100, 100);
-    const maxPages = clamp(options.maxPages, 3, 5);
+    const maxPages = clamp(options.maxPages, 1, 5);
     const comments: GitHubIssueComment[] = [];
     let lastMetadata: Pick<GitHubResponse<unknown>, "quota" | "requestId"> | null = null;
 
     for (let page = 1; page <= maxPages; page += 1) {
       const response = await this.#get(
-        `${repositoryPath(reference)}/issues/${reference.issueNumber}/comments?per_page=${perPage}&page=${page}`,
+        `${repositoryPath(reference)}/issues/${issueNumber}/comments?per_page=${perPage}&page=${page}`,
         parseIssueCommentPage,
       );
       comments.push(...response.data);
@@ -103,14 +114,20 @@ export class GitHubClient {
 
     return {
       data: comments,
-      quota: lastMetadata?.quota ?? {
-        limit: null,
-        remaining: null,
-        used: null,
-        resetAt: null,
-      },
+      quota: lastMetadata?.quota ?? { limit: null, remaining: null, used: null, resetAt: null },
       requestId: lastMetadata?.requestId ?? null,
     };
+  }
+
+  async listRecentIssues(
+    reference: RepositoryReference,
+    options: Readonly<{ limit?: number }> = {},
+  ): Promise<GitHubResponse<readonly GitHubIssue[]>> {
+    const limit = clamp(options.limit, 15, 20);
+    return this.#get(
+      `${repositoryPath(reference)}/issues?state=all&sort=updated&direction=desc&per_page=${limit}`,
+      parseIssuePage,
+    );
   }
 
   async getRepository(reference: RepositoryReference): Promise<GitHubResponse<GitHubRepository>> {
@@ -164,12 +181,7 @@ export class GitHubClient {
 
     return {
       data: events,
-      quota: lastMetadata?.quota ?? {
-        limit: null,
-        remaining: null,
-        used: null,
-        resetAt: null,
-      },
+      quota: lastMetadata?.quota ?? { limit: null, remaining: null, used: null, resetAt: null },
       requestId: lastMetadata?.requestId ?? null,
     };
   }
@@ -219,11 +231,7 @@ export class GitHubClient {
           });
         }
 
-        return {
-          data: parse(payload),
-          quota: quota(response.headers),
-          requestId,
-        };
+        return { data: parse(payload), quota: quota(response.headers), requestId };
       } catch (error) {
         if (error instanceof GitHubClientError) throw error;
         if (error instanceof DOMException && error.name === "TimeoutError") {
@@ -232,9 +240,7 @@ export class GitHubClient {
           });
         }
         if (attempt < this.#maxRetries) continue;
-        throw new GitHubClientError("network", "GitHub could not be reached.", {
-          cause: error,
-        });
+        throw new GitHubClientError("network", "GitHub could not be reached.", { cause: error });
       }
     }
 
