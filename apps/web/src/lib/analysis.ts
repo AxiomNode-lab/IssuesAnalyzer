@@ -66,7 +66,6 @@ type AnalysisServiceOptions = Readonly<{
 
 const MAINTAINER_ASSOCIATIONS = new Set(["COLLABORATOR", "MEMBER", "OWNER"]);
 const RESPONSIVENESS_SAMPLE_LIMIT = 15;
-const DAY = 86_400_000;
 
 function observeQuota(quota: GitHubQuota): void {
   if (quota.remaining !== null) recordMetric("github_quota_remaining", quota.remaining);
