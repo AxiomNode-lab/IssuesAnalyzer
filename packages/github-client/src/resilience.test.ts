@@ -21,9 +21,7 @@ describe("MemoryStaleCache", () => {
   });
 
   it("keeps personalized scopes separate", () => {
-    expect(scopedCacheKey("user:1", "issue:42")).not.toBe(
-      scopedCacheKey("user:2", "issue:42"),
-    );
+    expect(scopedCacheKey("user:1", "issue:42")).not.toBe(scopedCacheKey("user:2", "issue:42"));
   });
 
   it("defines bounded field-specific evidence policies", () => {
