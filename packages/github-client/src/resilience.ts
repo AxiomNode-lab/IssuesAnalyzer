@@ -76,8 +76,12 @@ export class FixedWindowRateLimiter {
     readonly limit: number,
     readonly windowMs: number,
   ) {
-    if (!Number.isInteger(limit) || limit < 1) throw new Error("limit must be a positive integer");
-    if (!Number.isFinite(windowMs) || windowMs < 1) throw new Error("windowMs must be positive");
+    if (!Number.isInteger(limit) || limit < 1) {
+      throw new Error("limit must be a positive integer");
+    }
+    if (!Number.isFinite(windowMs) || windowMs < 1) {
+      throw new Error("windowMs must be positive");
+    }
   }
 
   consume(key: string, now = Date.now()): RateLimitDecision {
