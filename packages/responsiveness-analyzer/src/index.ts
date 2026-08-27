@@ -75,15 +75,11 @@ function median(values: readonly number[]): number | null {
     : (ordered[middle] ?? null);
 }
 
-function confidence(
-  threadsUsed: number,
-  respondedThreads: number,
-): Readonly<{ level: ConfidenceLevel; value: number }> {
-  if (threadsUsed === 0) return { level: "low", value: 0 };
-  const sizeScore = Math.min(1, threadsUsed / 15);
-  const coverage = respondedThreads / threadsUsed;
-  const value = Math.round((sizeScore * 0.7 + coverage * 0.3) * 100);
-  return { level: value >= 75 ? "high" : value >= 45 ? "medium" : "low", value };
+function confidence(threadsUsed: number): Readonly<{ level: ConfidenceLevel; value: number }> {
+  if (threadsUsed >= 10) return { level: "high", value: 90 };
+  if (threadsUsed >= 5) return { level: "medium", value: 65 };
+  if (threadsUsed >= 2) return { level: "low", value: 35 };
+  return { level: "low", value: threadsUsed === 1 ? 15 : 0 };
 }
 
 export function analyzeMaintainerResponsiveness(input: ResponsivenessInput): ResponsivenessResult {
@@ -105,12 +101,7 @@ export function analyzeMaintainerResponsiveness(input: ResponsivenessInput): Res
       ],
       inferences: [],
       warnings: ["Historical responsiveness evidence is unavailable."],
-      sample: {
-        threadsUsed: 0,
-        respondedThreads: 0,
-        unansweredThreads: 0,
-        interactionsUsed: 0,
-      },
+      sample: { threadsUsed: 0, respondedThreads: 0, unansweredThreads: 0, interactionsUsed: 0 },
     };
   }
 
@@ -124,29 +115,24 @@ export function analyzeMaintainerResponsiveness(input: ResponsivenessInput): Res
   }
 
   const threads = [...input.threads]
-    .sort((left, right) => {
-      const difference = right.openedAt.getTime() - left.openedAt.getTime();
-      return difference === 0 ? left.sourceUrl.localeCompare(right.sourceUrl) : difference;
-    })
+    .sort((left, right) => right.openedAt.getTime() - left.openedAt.getTime())
     .slice(0, MAX_THREADS);
-
   const responseHours: number[] = [];
   let interactionsUsed = 0;
+
   for (const thread of threads) {
     const interactions = [...thread.interactions]
-      .sort((left, right) => {
-        const difference = left.createdAt.getTime() - right.createdAt.getTime();
-        return difference === 0 ? left.sourceUrl.localeCompare(right.sourceUrl) : difference;
-      })
+      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
       .slice(0, MAX_INTERACTIONS_PER_THREAD);
     interactionsUsed += interactions.length;
     const firstMaintainerResponse = interactions.find(
       (interaction) => interaction.actorIsMaintainer && !interaction.actorIsBot,
     );
-    if (firstMaintainerResponse !== undefined)
+    if (firstMaintainerResponse !== undefined) {
       responseHours.push(
         (firstMaintainerResponse.createdAt.getTime() - thread.openedAt.getTime()) / HOUR,
       );
+    }
   }
 
   const medianHours = median(responseHours);
@@ -155,30 +141,10 @@ export function analyzeMaintainerResponsiveness(input: ResponsivenessInput): Res
   const responseCoverage =
     threads.length === 0 ? null : Math.round((respondedThreads / threads.length) * 100);
   const facts: ResponsivenessFact[] = [
-    {
-      key: "responsiveness.sampleSize",
-      value: threads.length,
-      sourceUrl: input.repositoryUrl,
-      observedAt: input.asOf,
-    },
-    {
-      key: "responsiveness.respondedThreads",
-      value: respondedThreads,
-      sourceUrl: input.repositoryUrl,
-      observedAt: input.asOf,
-    },
-    {
-      key: "responsiveness.responseCoveragePercent",
-      value: responseCoverage,
-      sourceUrl: input.repositoryUrl,
-      observedAt: input.asOf,
-    },
-    {
-      key: "responsiveness.observedMedianHours",
-      value: medianHours === null ? null : Math.round(medianHours * 10) / 10,
-      sourceUrl: input.repositoryUrl,
-      observedAt: input.asOf,
-    },
+    { key: "responsiveness.sampleSize", value: threads.length, sourceUrl: input.repositoryUrl, observedAt: input.asOf },
+    { key: "responsiveness.respondedThreads", value: respondedThreads, sourceUrl: input.repositoryUrl, observedAt: input.asOf },
+    { key: "responsiveness.responseCoveragePercent", value: responseCoverage, sourceUrl: input.repositoryUrl, observedAt: input.asOf },
+    { key: "responsiveness.observedMedianHours", value: medianHours === null ? null : Math.round(medianHours * 10) / 10, sourceUrl: input.repositoryUrl, observedAt: input.asOf },
   ];
 
   const warnings: string[] = [];
@@ -188,50 +154,43 @@ export function analyzeMaintainerResponsiveness(input: ResponsivenessInput): Res
     warnings.push("Interactions were bounded to 100 records per thread.");
   if (threads.length < MIN_CLASSIFICATION_SAMPLE)
     warnings.push("The historical sample is too small for a responsiveness classification.");
-  if (respondedThreads < MIN_CLASSIFICATION_SAMPLE)
-    warnings.push("Too few maintainer responses were observed for a reliable classification.");
 
-  const status: ResponsivenessStatus =
-    respondedThreads < MIN_CLASSIFICATION_SAMPLE || medianHours === null
-      ? "insufficient"
-      : medianHours <= 48
-        ? "responsive"
-        : medianHours <= 168
-          ? "mixed"
-          : "slow";
-  const score =
-    status === "insufficient" ? 50 : status === "responsive" ? 85 : status === "mixed" ? 60 : 25;
-  const inferences: ResponsivenessInference[] =
-    status === "insufficient"
-      ? []
-      : [
-          {
-            key: "responsiveness.historicalPattern",
-            value: status,
-            basisFactKeys: [
-              "responsiveness.sampleSize",
-              "responsiveness.respondedThreads",
-              "responsiveness.responseCoveragePercent",
-              "responsiveness.observedMedianHours",
-            ],
-            caution:
-              "Historical maintainer behavior does not predict an exact response time or guarantee a reply.",
-          },
-        ];
+  const enoughSample = threads.length >= MIN_CLASSIFICATION_SAMPLE;
+  const coverage = responseCoverage ?? 0;
+  const status: ResponsivenessStatus = !enoughSample
+    ? "insufficient"
+    : coverage >= 75 && medianHours !== null && medianHours <= 48
+      ? "responsive"
+      : coverage >= 50 && medianHours !== null && medianHours <= 168
+        ? "mixed"
+        : "slow";
+  const score = status === "insufficient" ? 50 : status === "responsive" ? 85 : status === "mixed" ? 60 : 25;
+
+  if (enoughSample && respondedThreads === 0)
+    warnings.push("No maintainer responses were observed in the bounded historical sample.");
+  if (enoughSample && respondedThreads > 0 && respondedThreads < 3)
+    warnings.push("Few maintainer responses were observed; response-time statistics are limited.");
+
+  const inferences: ResponsivenessInference[] = status === "insufficient" ? [] : [{
+    key: "responsiveness.historicalPattern",
+    value: status,
+    basisFactKeys: [
+      "responsiveness.sampleSize",
+      "responsiveness.respondedThreads",
+      "responsiveness.responseCoveragePercent",
+      "responsiveness.observedMedianHours",
+    ],
+    caution: "Historical maintainer behavior does not predict an exact response time or guarantee a reply.",
+  }];
 
   return {
     version: "responsiveness-v1",
     status,
     score,
-    confidence: confidence(threads.length, respondedThreads),
+    confidence: confidence(threads.length),
     facts,
     inferences,
     warnings,
-    sample: {
-      threadsUsed: threads.length,
-      respondedThreads,
-      unansweredThreads,
-      interactionsUsed,
-    },
+    sample: { threadsUsed: threads.length, respondedThreads, unansweredThreads, interactionsUsed },
   };
 }
