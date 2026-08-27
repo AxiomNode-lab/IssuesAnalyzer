@@ -24,6 +24,10 @@
   gap: 1.25rem;
 }
 
+.hero > .report {
+  margin-top: 2rem;
+}
+
 .report-header {
   display: grid;
   grid-template-columns: 1fr auto;

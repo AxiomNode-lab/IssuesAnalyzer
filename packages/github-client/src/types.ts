@@ -34,6 +34,15 @@ export type GitHubIssueComment = Readonly<{
   createdAt: Date;
   updatedAt: Date;
   htmlUrl: string;
+  authorAssociation:
+    | "COLLABORATOR"
+    | "CONTRIBUTOR"
+    | "FIRST_TIMER"
+    | "FIRST_TIME_CONTRIBUTOR"
+    | "MANNEQUIN"
+    | "MEMBER"
+    | "NONE"
+    | "OWNER";
 }>;
 
 export type GitHubRepository = Readonly<{
@@ -76,7 +85,7 @@ export type GitHubCommunityProfile = Readonly<{
 }>;
 
 export type GitHubIssueEvent = Readonly<{
-  nodeId: string;
+  nodeId: string | null;
   event: string;
   actor: GitHubActor | null;
   createdAt: Date;

@@ -9,6 +9,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@opportunity-radar/activity-analyzer": "workspace:*",
+    "@opportunity-radar/competition-analyzer": "workspace:*",
+    "@opportunity-radar/domain": "workspace:*",
+    "@opportunity-radar/github-client": "workspace:*",
+    "@opportunity-radar/responsiveness-analyzer": "workspace:*",
+    "@opportunity-radar/scoring-engine": "workspace:*",
     "next": "16.3.2",
     "postgres": "3.4.7",
     "react": "19.2.8",

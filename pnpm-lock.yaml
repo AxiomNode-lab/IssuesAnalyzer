@@ -29,6 +29,24 @@ importers:
 
   apps/web:
     dependencies:
+      '@opportunity-radar/activity-analyzer':
+        specifier: workspace:*
+        version: link:../../packages/activity-analyzer
+      '@opportunity-radar/competition-analyzer':
+        specifier: workspace:*
+        version: link:../../packages/competition-analyzer
+      '@opportunity-radar/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@opportunity-radar/github-client':
+        specifier: workspace:*
+        version: link:../../packages/github-client
+      '@opportunity-radar/responsiveness-analyzer':
+        specifier: workspace:*
+        version: link:../../packages/responsiveness-analyzer
+      '@opportunity-radar/scoring-engine':
+        specifier: workspace:*
+        version: link:../../packages/scoring-engine
       next:
         specifier: 16.3.2
         version: 16.3.2(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

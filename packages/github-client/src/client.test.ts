@@ -34,6 +34,7 @@ function commentFixture(): Record<string, unknown> {
     id: 9,
     body: "A comment",
     user: { login: "reviewer", html_url: "https://github.com/reviewer" },
+    author_association: "MEMBER",
     created_at: "2026-08-01T10:00:00Z",
     updated_at: "2026-08-01T10:00:00Z",
     html_url: "https://github.com/octocat/Hello-World/issues/1347#issuecomment-9",
@@ -406,6 +407,28 @@ describe("GitHubClient", () => {
       actor: null,
       sourceUrl: reference.canonicalUrl,
       createdAt: new Date("2026-08-21T10:00:00Z"),
+    });
+  });
+
+  it("accepts valid timeline variants that omit node_id", async () => {
+    const client = new GitHubClient({
+      maxRetries: 0,
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {
+              event: "mentioned",
+              actor: null,
+              created_at: "2026-08-21T10:00:00Z",
+            },
+          ]),
+          { status: 200 },
+        ),
+      ),
+    });
+
+    await expect(client.listIssueTimeline(reference)).resolves.toMatchObject({
+      data: [{ nodeId: null, event: "mentioned" }],
     });
   });
 

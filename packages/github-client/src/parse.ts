@@ -121,6 +121,24 @@ export function parseIssue(value: unknown): GitHubIssue {
 
 export function parseIssueComment(value: unknown): GitHubIssueComment {
   const source = object(value);
+  const authorAssociation = string(source.author_association, "author association");
+  if (
+    ![
+      "COLLABORATOR",
+      "CONTRIBUTOR",
+      "FIRST_TIMER",
+      "FIRST_TIME_CONTRIBUTOR",
+      "MANNEQUIN",
+      "MEMBER",
+      "NONE",
+      "OWNER",
+    ].includes(authorAssociation)
+  ) {
+    throw new GitHubClientError(
+      "invalid_payload",
+      "GitHub returned an invalid author association.",
+    );
+  }
   return {
     id: number(source.id, "comment id"),
     body: nullableString(source.body, "comment body"),
@@ -128,6 +146,7 @@ export function parseIssueComment(value: unknown): GitHubIssueComment {
     createdAt: date(source.created_at, "created date"),
     updatedAt: date(source.updated_at, "updated date"),
     htmlUrl: string(source.html_url, "comment URL"),
+    authorAssociation: authorAssociation as GitHubIssueComment["authorAssociation"],
   };
 }
 
@@ -215,7 +234,10 @@ export function parseIssueEventPage(
   return value.map((entry) => {
     const source = object(entry);
     return {
-      nodeId: string(source.node_id, "timeline node id"),
+      nodeId:
+        source.node_id === undefined || source.node_id === null
+          ? null
+          : string(source.node_id, "timeline node id"),
       event: string(source.event, "timeline event"),
       actor: nullableActor(source.actor),
       createdAt: date(source.created_at, "timeline event date"),
