@@ -5,8 +5,8 @@ import "./globals.css";
 import "./report.css";
 
 export const metadata: Metadata = {
-  title: "GitHub Opportunity Radar",
-  description: "Decide whether a GitHub issue deserves your time.",
+  title: "Issue Analyzer",
+  description: "Know before you code. Analyze a public GitHub issue before you invest your time.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
