@@ -59,12 +59,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Diagnose observability formatting
-        run: |
-          pnpm exec prettier --write apps/web/src/lib/observability.ts
-          git diff -- apps/web/src/lib/observability.ts
-          git diff --exit-code -- apps/web/src/lib/observability.ts
-
       - name: Verify formatting, lint, types, tests, and build
         run: pnpm verify
 
