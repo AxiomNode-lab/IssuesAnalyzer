@@ -6,6 +6,8 @@ export type RuntimeConfig = Readonly<{
   release: string;
 }>;
 
+type RuntimeEnvironment = Readonly<Record<string, string | undefined>>;
+
 const VALID_ENVIRONMENTS = new Set<AppEnvironment>([
   "development",
   "test",
@@ -13,7 +15,7 @@ const VALID_ENVIRONMENTS = new Set<AppEnvironment>([
   "production",
 ]);
 
-export function runtimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
+export function runtimeConfig(env: RuntimeEnvironment = process.env): RuntimeConfig {
   const rawEnvironment = env.APP_ENV ?? env.NODE_ENV ?? "development";
   if (!VALID_ENVIRONMENTS.has(rawEnvironment as AppEnvironment)) {
     throw new Error(`Unsupported APP_ENV: ${rawEnvironment}`);
