@@ -1,7 +1,7 @@
 "use client";
 
 import { parseGitHubIssueUrl } from "@opportunity-radar/domain";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { FormEvent } from "react";
 
 import { AnalysisReport } from "./analysis-report";
@@ -16,6 +16,12 @@ export function IssueAnalyzer() {
   const [status, setStatus] = useState<Status>("empty");
   const [error, setError] = useState("");
   const [report, setReport] = useState<AnalysisReportModel | null>(null);
+
+  useEffect(() => {
+    if (status === "success" && report !== null) {
+      document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [status, report]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,7 +86,7 @@ export function IssueAnalyzer() {
               }}
             />
             <button type="submit" disabled={status === "loading"}>
-              {status === "loading" ? "Analyzing GitHub evidence…" : "Analyze issue"}
+              {status === "loading" ? "Analyzing…" : "Analyze issue →"}
             </button>
           </div>
           {status === "invalid" && (
@@ -90,7 +96,7 @@ export function IssueAnalyzer() {
           )}
           {status === "loading" && (
             <p className="form-message" role="status" aria-live="polite">
-              Analyzing GitHub evidence…
+              Analyzing live GitHub evidence…
             </p>
           )}
           {status === "error" && (
@@ -98,14 +104,14 @@ export function IssueAnalyzer() {
               {error}
             </p>
           )}
-          {status === "empty" && (
-            <p className="form-hint">
-              Public issues only. GitHub evidence is fetched securely by the server.
-            </p>
-          )}
         </form>
       </div>
-      {status === "success" && report !== null && <AnalysisReport report={report} />}
+
+      {status === "success" && report !== null && (
+        <div className="report-portal" aria-live="polite">
+          <AnalysisReport report={report} />
+        </div>
+      )}
     </>
   );
 }
