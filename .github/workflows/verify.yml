@@ -59,14 +59,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Diagnose formatting and verify code
-        run: |
-          pnpm exec prettier --write packages/github-client/RESILIENCE.md packages/github-client/src/resilience.test.ts
-          git diff -- packages/github-client/RESILIENCE.md packages/github-client/src/resilience.test.ts
-          pnpm lint
-          pnpm typecheck
-          pnpm test
-          pnpm build
+      - name: Verify formatting, lint, types, tests, and build
+        run: pnpm verify
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
