@@ -1,7 +1,11 @@
 import { runtimeConfig } from "./runtime-config";
 import { redactForLog } from "./security";
 
-type MetricKey = "request_latency_ms" | "cache_hit" | "cache_miss" | "github_quota_remaining";
+type MetricKey =
+  | "request_latency_ms"
+  | "cache_hit"
+  | "cache_miss"
+  | "github_quota_remaining";
 
 type MetricState = {
   count: number;
@@ -65,7 +69,10 @@ export function reportOperationalError(
   structuredLog("error", "operational_error", { ...context, error: normalized });
 }
 
-export async function observeLatency<T>(event: string, work: () => Promise<T>): Promise<T> {
+export async function observeLatency<T>(
+  event: string,
+  work: () => Promise<T>,
+): Promise<T> {
   const started = performance.now();
   try {
     return await work();
