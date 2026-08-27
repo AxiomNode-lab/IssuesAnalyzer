@@ -1,7 +1,11 @@
-import { redactForLog } from "./security";
 import { runtimeConfig } from "./runtime-config";
+import { redactForLog } from "./security";
 
-type MetricKey = "request_latency_ms" | "cache_hit" | "cache_miss" | "github_quota_remaining";
+type MetricKey =
+  | "request_latency_ms"
+  | "cache_hit"
+  | "cache_miss"
+  | "github_quota_remaining";
 
 type MetricState = {
   count: number;
@@ -54,8 +58,14 @@ export function structuredLog(
   return payload;
 }
 
-export function reportOperationalError(error: unknown, context: Record<string, unknown> = {}): void {
-  const normalized = error instanceof Error ? { name: error.name, message: error.message } : { message: String(error) };
+export function reportOperationalError(
+  error: unknown,
+  context: Record<string, unknown> = {},
+): void {
+  const normalized =
+    error instanceof Error
+      ? { name: error.name, message: error.message }
+      : { message: String(error) };
   structuredLog("error", "operational_error", { ...context, error: normalized });
 }
 
