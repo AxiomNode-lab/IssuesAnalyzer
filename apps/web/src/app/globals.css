@@ -193,14 +193,24 @@ main {
   place-items: center;
   padding: clamp(4rem, 8vw, 7rem) 1rem 3.5rem;
   background:
-    radial-gradient(circle at 50% 34%, rgb(255 255 255 / 96%) 0, rgb(247 250 255 / 88%) 30%, transparent 66%),
+    radial-gradient(
+      circle at 50% 34%,
+      rgb(255 255 255 / 96%) 0,
+      rgb(247 250 255 / 88%) 30%,
+      transparent 66%
+    ),
     linear-gradient(180deg, #e9f2ff 0%, #f6f8fb 78%);
 }
 
 @media (prefers-color-scheme: dark) {
   .hero {
     background:
-      radial-gradient(circle at 50% 34%, rgb(30 41 59 / 72%) 0, rgb(13 17 23 / 76%) 34%, transparent 68%),
+      radial-gradient(
+        circle at 50% 34%,
+        rgb(30 41 59 / 72%) 0,
+        rgb(13 17 23 / 76%) 34%,
+        transparent 68%
+      ),
       linear-gradient(180deg, #101720 0%, #0d1117 78%);
   }
 }
