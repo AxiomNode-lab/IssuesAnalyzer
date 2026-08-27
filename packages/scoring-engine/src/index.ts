@@ -56,7 +56,12 @@ export type OpportunityScoreResult = Readonly<{
   decisionReason: string;
 }>;
 
-const ORDER: readonly ComponentKey[] = ["activity", "competition", "responsiveness", "actionability"];
+const ORDER: readonly ComponentKey[] = [
+  "activity",
+  "competition",
+  "responsiveness",
+  "actionability",
+];
 const WEIGHTS: Readonly<Record<ComponentKey, number>> = {
   activity: 0.25,
   competition: 0.2,
@@ -89,12 +94,16 @@ function decision(score: number): Decision {
   return score >= 70 ? "pursue" : score >= 40 ? "review_carefully" : "skip";
 }
 
-function decisionReason(result: Readonly<{
-  score: number;
-  components: readonly ScoreComponent[];
-  hardWarnings: readonly AppliedHardWarning[];
-}>): string {
-  const lowActionability = result.hardWarnings.find((warning) => warning.key === "issue_low_actionability");
+function decisionReason(
+  result: Readonly<{
+    score: number;
+    components: readonly ScoreComponent[];
+    hardWarnings: readonly AppliedHardWarning[];
+  }>,
+): string {
+  const lowActionability = result.hardWarnings.find(
+    (warning) => warning.key === "issue_low_actionability",
+  );
   if (lowActionability) return lowActionability.reason;
   const staleGuard = result.hardWarnings.find(
     (warning) => warning.key === "stale_opportunity_uncertain_maintainers",
@@ -157,17 +166,27 @@ export function calculateOpportunityScore(input: OpportunityScoreInput): Opportu
   });
 
   const uncappedScore = Math.round(
-    components.reduce((total, component) => total + component.normalizedScore * component.weight, 0),
+    components.reduce(
+      (total, component) => total + component.normalizedScore * component.weight,
+      0,
+    ),
   );
   const overallConfidence = Math.round(
-    components.reduce((total, component) => total + component.confidence.value * component.weight, 0),
+    components.reduce(
+      (total, component) => total + component.confidence.value * component.weight,
+      0,
+    ),
   );
 
   const hardWarningsApplied = (input.hardWarnings ?? []).map((warning): AppliedHardWarning => {
     assertNonEmpty(warning.evidenceKeys, `${warning.key} evidenceKeys`);
     if (warning.reason.trim().length === 0)
       throw new TypeError(`${warning.key} reason must not be empty.`);
-    return { ...warning, evidenceKeys: [...warning.evidenceKeys], scoreCap: HARD_WARNING_CAPS[warning.key] };
+    return {
+      ...warning,
+      evidenceKeys: [...warning.evidenceKeys],
+      scoreCap: HARD_WARNING_CAPS[warning.key],
+    };
   });
   const scoreCap = hardWarningsApplied.reduce(
     (lowest, warning) => Math.min(lowest, warning.scoreCap),

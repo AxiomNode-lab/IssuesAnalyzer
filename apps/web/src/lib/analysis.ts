@@ -263,7 +263,9 @@ function latestActivityFreshnessDays(activity: RepositoryActivityResult): number
   return fact?.freshnessDays ?? null;
 }
 
-function stalenessBand(days: number | null): "unknown" | "recent" | "moderately_quiet" | "stale" | "very_stale" {
+function stalenessBand(
+  days: number | null,
+): "unknown" | "recent" | "moderately_quiet" | "stale" | "very_stale" {
   if (days === null) return "unknown";
   if (days <= 30) return "recent";
   if (days <= 90) return "moderately_quiet";
@@ -287,16 +289,29 @@ function hardWarnings(
 ): HardWarningInput[] {
   const warnings: HardWarningInput[] = [];
   if (repository.archived)
-    warnings.push({ key: "repository_archived", evidenceKeys: ["repository.archived"], reason: "The repository is archived." });
+    warnings.push({
+      key: "repository_archived",
+      evidenceKeys: ["repository.archived"],
+      reason: "The repository is archived.",
+    });
   if (repository.disabled)
-    warnings.push({ key: "repository_disabled", evidenceKeys: ["repository.disabled"], reason: "The repository is disabled." });
+    warnings.push({
+      key: "repository_disabled",
+      evidenceKeys: ["repository.disabled"],
+      reason: "The repository is disabled.",
+    });
   if (issue.state === "closed")
-    warnings.push({ key: "issue_closed", evidenceKeys: ["issue.state"], reason: "The issue is closed." });
+    warnings.push({
+      key: "issue_closed",
+      evidenceKeys: ["issue.state"],
+      reason: "The issue is closed.",
+    });
   if (actionability.status === "low" && actionability.confidence.level === "high")
     warnings.push({
       key: "issue_low_actionability",
       evidenceKeys: actionability.facts.map((fact) => fact.key),
-      reason: "The issue is currently a high-confidence low-actionability discussion or planning item, not a contribution-ready implementation task.",
+      reason:
+        "The issue is currently a high-confidence low-actionability discussion or planning item, not a contribution-ready implementation task.",
     });
 
   const activityFreshness = latestActivityFreshnessDays(activity);
@@ -307,7 +322,8 @@ function hardWarnings(
     warnings.push({
       key: "stale_opportunity_uncertain_maintainers",
       evidenceKeys: ["repository.latestActivityAt", "responsiveness.sampleSize"],
-      reason: "The issue appears actionable, but repository activity is stale and maintainer-response evidence is insufficient for a strong Pursue recommendation.",
+      reason:
+        "The issue appears actionable, but repository activity is stale and maintainer-response evidence is insufficient for a strong Pursue recommendation.",
     });
   }
   return warnings;
@@ -341,14 +357,23 @@ async function buildReport(
   const activity = analyzeRepositoryActivity({
     asOf,
     repository,
-    commits: commits?.map((commit) => ({ occurredAt: commit.committedAt, sourceUrl: commit.htmlUrl })) ?? null,
-    releases: releases?.map((release) => ({ occurredAt: release.publishedAt, sourceUrl: release.htmlUrl })) ?? null,
-    readiness: readiness === null ? null : {
-      contributingGuide: readiness.contributingGuide,
-      codeOfConduct: readiness.codeOfConduct,
-      issueTemplates: readiness.issueTemplate,
-      sourceUrl: readiness.sourceUrl,
-    },
+    commits:
+      commits?.map((commit) => ({ occurredAt: commit.committedAt, sourceUrl: commit.htmlUrl })) ??
+      null,
+    releases:
+      releases?.map((release) => ({
+        occurredAt: release.publishedAt,
+        sourceUrl: release.htmlUrl,
+      })) ?? null,
+    readiness:
+      readiness === null
+        ? null
+        : {
+            contributingGuide: readiness.contributingGuide,
+            codeOfConduct: readiness.codeOfConduct,
+            issueTemplates: readiness.issueTemplate,
+            sourceUrl: readiness.sourceUrl,
+          },
   });
   const competition = analyzeCompetition({
     asOf,
@@ -358,27 +383,33 @@ async function buildReport(
       authorLogin: issue.author.login,
       assignees: issue.assignees,
     },
-    comments: comments?.map((comment) => ({
-      author: comment.author,
-      body: comment.body,
-      createdAt: comment.createdAt,
-      sourceUrl: comment.htmlUrl,
-    })) ?? null,
-    timeline: timeline?.map((event: GitHubIssueEvent) => ({
-      event: event.event,
-      actor: event.actor,
-      createdAt: event.createdAt,
-      sourceUrl: event.sourceUrl,
-      referencedPullRequest: event.referencedPullRequest === null ? null : {
-        ...event.referencedPullRequest,
-        body: null,
-        sourceUrl: event.referencedPullRequest.htmlUrl,
-      },
-    })) ?? null,
-    pullRequests: pullRequests?.map((pullRequest: GitHubPullRequestEvidence) => ({
-      ...pullRequest,
-      sourceUrl: pullRequest.htmlUrl,
-    })) ?? null,
+    comments:
+      comments?.map((comment) => ({
+        author: comment.author,
+        body: comment.body,
+        createdAt: comment.createdAt,
+        sourceUrl: comment.htmlUrl,
+      })) ?? null,
+    timeline:
+      timeline?.map((event: GitHubIssueEvent) => ({
+        event: event.event,
+        actor: event.actor,
+        createdAt: event.createdAt,
+        sourceUrl: event.sourceUrl,
+        referencedPullRequest:
+          event.referencedPullRequest === null
+            ? null
+            : {
+                ...event.referencedPullRequest,
+                body: null,
+                sourceUrl: event.referencedPullRequest.htmlUrl,
+              },
+      })) ?? null,
+    pullRequests:
+      pullRequests?.map((pullRequest: GitHubPullRequestEvidence) => ({
+        ...pullRequest,
+        sourceUrl: pullRequest.htmlUrl,
+      })) ?? null,
     completeness: {
       timeline: timeline === null || timeline.length < 200,
       pullRequests: pullRequests === null || pullRequests.length < 100,

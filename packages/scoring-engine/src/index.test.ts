@@ -113,7 +113,11 @@ describe("calculateOpportunityScore", () => {
       ...input(100, 0, 100),
       hardWarnings: [
         { key: "issue_closed", evidenceKeys: ["issue.state"], reason: "Issue is closed." },
-        { key: "repository_archived", evidenceKeys: ["repository.archived"], reason: "Repository is archived." },
+        {
+          key: "repository_archived",
+          evidenceKeys: ["repository.archived"],
+          reason: "Repository is archived.",
+        },
       ],
     });
     expect(result.score).toBe(0);
@@ -147,13 +151,24 @@ describe("calculateOpportunityScore", () => {
   it("rejects missing and duplicate components", () => {
     expect(() =>
       calculateOpportunityScore({
-        components: [component("activity", 50), component("competition", 50), component("responsiveness", 50)],
+        components: [
+          component("activity", 50),
+          component("competition", 50),
+          component("responsiveness", 50),
+        ],
       }),
-    ).toThrow("Exactly one activity, competition, responsiveness, and actionability component is required.");
+    ).toThrow(
+      "Exactly one activity, competition, responsiveness, and actionability component is required.",
+    );
 
     expect(() =>
       calculateOpportunityScore({
-        components: [component("activity", 50), component("activity", 50), component("responsiveness", 50), component("actionability", 50)],
+        components: [
+          component("activity", 50),
+          component("activity", 50),
+          component("responsiveness", 50),
+          component("actionability", 50),
+        ],
       }),
     ).toThrow("Duplicate component: activity.");
   });

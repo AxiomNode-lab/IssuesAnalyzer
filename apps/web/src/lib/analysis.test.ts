@@ -1,5 +1,9 @@
 import { GitHubClientError, StaleWhileRevalidateCache } from "@opportunity-radar/github-client";
-import type { GitHubIssueEvent, GitHubQuota, GitHubResponse } from "@opportunity-radar/github-client";
+import type {
+  GitHubIssueEvent,
+  GitHubQuota,
+  GitHubResponse,
+} from "@opportunity-radar/github-client";
 import { describe, expect, it, vi } from "vitest";
 
 import { createAnalysisService, InvalidAnalysisInputError } from "./analysis";
@@ -144,7 +148,9 @@ describe("live analysis orchestration", () => {
     );
 
     const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
-    const responsiveness = report.components.find((component) => component.key === "responsiveness")!;
+    const responsiveness = report.components.find(
+      (component) => component.key === "responsiveness",
+    )!;
 
     expect(client.listIssueCommentsByNumber).toHaveBeenCalledTimes(12);
     expect(responsiveness.facts).toContainEqual(
@@ -239,17 +245,26 @@ describe("live analysis orchestration", () => {
 
   it("deduplicates equivalent concurrent requests", async () => {
     const client = evidenceClient();
-    const analyze = createAnalysisService({ client, cache: new StaleWhileRevalidateCache(), now: () => asOf });
+    const analyze = createAnalysisService({
+      client,
+      cache: new StaleWhileRevalidateCache(),
+      now: () => asOf,
+    });
     const [first, second] = await Promise.all([analyze(referenceUrl), analyze(referenceUrl)]);
     expect(first).toEqual(second);
     expectPrimaryEvidenceCalls(client);
   });
 
-  it.each(["not_found", "rate_limited"] as const)("surfaces a primary GitHub %s failure", async (kind) => {
-    const client = evidenceClient();
-    client.getIssue.mockRejectedValueOnce(new GitHubClientError(kind, "upstream failure"));
-    await expect(createAnalysisService({ client, now: () => asOf })(referenceUrl)).rejects.toMatchObject({ kind });
-  });
+  it.each(["not_found", "rate_limited"] as const)(
+    "surfaces a primary GitHub %s failure",
+    async (kind) => {
+      const client = evidenceClient();
+      client.getIssue.mockRejectedValueOnce(new GitHubClientError(kind, "upstream failure"));
+      await expect(
+        createAnalysisService({ client, now: () => asOf })(referenceUrl),
+      ).rejects.toMatchObject({ kind });
+    },
+  );
 
   it("marks missing secondary evidence as partial without fabricating it", async () => {
     const client = evidenceClient();
@@ -266,7 +281,9 @@ describe("live analysis orchestration", () => {
     async (kind) => {
       const client = evidenceClient();
       client.listRecentIssues.mockRejectedValueOnce(new GitHubClientError(kind, "failure"));
-      await expect(createAnalysisService({ client, now: () => asOf })(referenceUrl)).rejects.toMatchObject({ kind });
+      await expect(
+        createAnalysisService({ client, now: () => asOf })(referenceUrl),
+      ).rejects.toMatchObject({ kind });
     },
   );
 });

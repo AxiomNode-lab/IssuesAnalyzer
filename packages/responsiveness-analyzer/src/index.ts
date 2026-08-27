@@ -141,10 +141,30 @@ export function analyzeMaintainerResponsiveness(input: ResponsivenessInput): Res
   const responseCoverage =
     threads.length === 0 ? null : Math.round((respondedThreads / threads.length) * 100);
   const facts: ResponsivenessFact[] = [
-    { key: "responsiveness.sampleSize", value: threads.length, sourceUrl: input.repositoryUrl, observedAt: input.asOf },
-    { key: "responsiveness.respondedThreads", value: respondedThreads, sourceUrl: input.repositoryUrl, observedAt: input.asOf },
-    { key: "responsiveness.responseCoveragePercent", value: responseCoverage, sourceUrl: input.repositoryUrl, observedAt: input.asOf },
-    { key: "responsiveness.observedMedianHours", value: medianHours === null ? null : Math.round(medianHours * 10) / 10, sourceUrl: input.repositoryUrl, observedAt: input.asOf },
+    {
+      key: "responsiveness.sampleSize",
+      value: threads.length,
+      sourceUrl: input.repositoryUrl,
+      observedAt: input.asOf,
+    },
+    {
+      key: "responsiveness.respondedThreads",
+      value: respondedThreads,
+      sourceUrl: input.repositoryUrl,
+      observedAt: input.asOf,
+    },
+    {
+      key: "responsiveness.responseCoveragePercent",
+      value: responseCoverage,
+      sourceUrl: input.repositoryUrl,
+      observedAt: input.asOf,
+    },
+    {
+      key: "responsiveness.observedMedianHours",
+      value: medianHours === null ? null : Math.round(medianHours * 10) / 10,
+      sourceUrl: input.repositoryUrl,
+      observedAt: input.asOf,
+    },
   ];
 
   const warnings: string[] = [];
@@ -164,24 +184,31 @@ export function analyzeMaintainerResponsiveness(input: ResponsivenessInput): Res
       : coverage >= 50 && medianHours !== null && medianHours <= 168
         ? "mixed"
         : "slow";
-  const score = status === "insufficient" ? 50 : status === "responsive" ? 85 : status === "mixed" ? 60 : 25;
+  const score =
+    status === "insufficient" ? 50 : status === "responsive" ? 85 : status === "mixed" ? 60 : 25;
 
   if (enoughSample && respondedThreads === 0)
     warnings.push("No maintainer responses were observed in the bounded historical sample.");
   if (enoughSample && respondedThreads > 0 && respondedThreads < 3)
     warnings.push("Few maintainer responses were observed; response-time statistics are limited.");
 
-  const inferences: ResponsivenessInference[] = status === "insufficient" ? [] : [{
-    key: "responsiveness.historicalPattern",
-    value: status,
-    basisFactKeys: [
-      "responsiveness.sampleSize",
-      "responsiveness.respondedThreads",
-      "responsiveness.responseCoveragePercent",
-      "responsiveness.observedMedianHours",
-    ],
-    caution: "Historical maintainer behavior does not predict an exact response time or guarantee a reply.",
-  }];
+  const inferences: ResponsivenessInference[] =
+    status === "insufficient"
+      ? []
+      : [
+          {
+            key: "responsiveness.historicalPattern",
+            value: status,
+            basisFactKeys: [
+              "responsiveness.sampleSize",
+              "responsiveness.respondedThreads",
+              "responsiveness.responseCoveragePercent",
+              "responsiveness.observedMedianHours",
+            ],
+            caution:
+              "Historical maintainer behavior does not predict an exact response time or guarantee a reply.",
+          },
+        ];
 
   return {
     version: "responsiveness-v1",

@@ -30,12 +30,15 @@ function thread(
   extraInteractions: readonly InteractionEvidence[] = [],
 ): ThreadEvidence {
   const openedAt = new Date(`2026-08-${String(index).padStart(2, "0")}T00:00:00.000Z`);
-  const response = responseHours === null ? [] : [
-    interaction(responseHours, {
-      createdAt: new Date(openedAt.getTime() + responseHours * 3_600_000),
-      sourceUrl: `${repositoryUrl}/issues/${index}#maintainer-response`,
-    }),
-  ];
+  const response =
+    responseHours === null
+      ? []
+      : [
+          interaction(responseHours, {
+            createdAt: new Date(openedAt.getTime() + responseHours * 3_600_000),
+            sourceUrl: `${repositoryUrl}/issues/${index}#maintainer-response`,
+          }),
+        ];
   return {
     kind: index % 2 === 0 ? "pull_request" : "issue",
     openedAt,
@@ -107,9 +110,20 @@ describe("analyzeMaintainerResponsiveness", () => {
   });
 
   it("uses sample-size confidence bands", () => {
-    expect(analyzeMaintainerResponsiveness(input({ threads: [thread(1, 1), thread(1, 2)] })).confidence.level).toBe("low");
-    expect(analyzeMaintainerResponsiveness(input({ threads: Array.from({ length: 6 }, (_, i) => thread(12, i + 1)) })).confidence.level).toBe("medium");
-    expect(analyzeMaintainerResponsiveness(input({ threads: Array.from({ length: 12 }, (_, i) => thread(12, i + 1)) })).confidence.level).toBe("high");
+    expect(
+      analyzeMaintainerResponsiveness(input({ threads: [thread(1, 1), thread(1, 2)] })).confidence
+        .level,
+    ).toBe("low");
+    expect(
+      analyzeMaintainerResponsiveness(
+        input({ threads: Array.from({ length: 6 }, (_, i) => thread(12, i + 1)) }),
+      ).confidence.level,
+    ).toBe("medium");
+    expect(
+      analyzeMaintainerResponsiveness(
+        input({ threads: Array.from({ length: 12 }, (_, i) => thread(12, i + 1)) }),
+      ).confidence.level,
+    ).toBe("high");
   });
 
   it("treats a sufficiently large unanswered sample as negative evidence", () => {
@@ -130,8 +144,16 @@ describe("analyzeMaintainerResponsiveness", () => {
   it("ignores bot and non-maintainer interactions", () => {
     const openedAt = new Date("2026-08-01T00:00:00.000Z");
     const ignored = [
-      interaction(1, { actorLogin: "automation[bot]", actorIsBot: true, createdAt: new Date(openedAt.getTime() + 3_600_000) }),
-      interaction(2, { actorLogin: "contributor", actorIsMaintainer: false, createdAt: new Date(openedAt.getTime() + 7_200_000) }),
+      interaction(1, {
+        actorLogin: "automation[bot]",
+        actorIsBot: true,
+        createdAt: new Date(openedAt.getTime() + 3_600_000),
+      }),
+      interaction(2, {
+        actorLogin: "contributor",
+        actorIsMaintainer: false,
+        createdAt: new Date(openedAt.getTime() + 7_200_000),
+      }),
     ];
     const result = analyzeMaintainerResponsiveness(
       input({ threads: [thread(12, 1, ignored), thread(24, 2, ignored), thread(36, 3, ignored)] }),
@@ -149,9 +171,14 @@ describe("analyzeMaintainerResponsiveness", () => {
 
   it("bounds threads and interactions", () => {
     const manyInteractions = Array.from({ length: 110 }, (_, index) =>
-      interaction(index + 1, { actorIsMaintainer: false, sourceUrl: `${repositoryUrl}/comment/${index}` }),
+      interaction(index + 1, {
+        actorIsMaintainer: false,
+        sourceUrl: `${repositoryUrl}/comment/${index}`,
+      }),
     );
-    const threads = Array.from({ length: 60 }, (_, index) => thread(12, (index % 20) + 1, manyInteractions));
+    const threads = Array.from({ length: 60 }, (_, index) =>
+      thread(12, (index % 20) + 1, manyInteractions),
+    );
     const result = analyzeMaintainerResponsiveness(input({ threads }));
     expect(result.sample.threadsUsed).toBe(50);
     expect(result.sample.interactionsUsed).toBe(5_000);
@@ -161,7 +188,12 @@ describe("analyzeMaintainerResponsiveness", () => {
     expect(() =>
       analyzeMaintainerResponsiveness(
         input({
-          threads: [{ ...thread(null, 1), interactions: [interaction(1, { createdAt: new Date("2026-07-01T00:00:00.000Z") })] }],
+          threads: [
+            {
+              ...thread(null, 1),
+              interactions: [interaction(1, { createdAt: new Date("2026-07-01T00:00:00.000Z") })],
+            },
+          ],
         }),
       ),
     ).toThrow(new RangeError("Interaction date cannot be before thread opening."));
