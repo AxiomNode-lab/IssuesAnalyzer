@@ -70,10 +70,8 @@ function evidenceClient() {
     ),
     listIssueComments: vi.fn(async () => response([maintainerComment(27888)])),
     listIssueCommentsByNumber: vi.fn(
-      async (
-        _reference: Readonly<{ owner: string; repository: string }>,
-        _issueNumber: number,
-      ) => response([maintainerComment()]),
+      async (_reference: Readonly<{ owner: string; repository: string }>, _issueNumber: number) =>
+        response([maintainerComment()]),
     ),
     listRecentIssues: vi.fn(async () => response<readonly ReturnType<typeof issue>[]>([])),
     listRecentCommits: vi.fn(async () =>
