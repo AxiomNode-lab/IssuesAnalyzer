@@ -425,7 +425,9 @@ a:focus-visible {
   display: block;
   margin-bottom: 1.4rem;
   color: var(--focus);
-  font: 700 0.72rem ui-monospace, monospace;
+  font:
+    700 0.72rem ui-monospace,
+    monospace;
 }
 
 .info-strip h2 {
