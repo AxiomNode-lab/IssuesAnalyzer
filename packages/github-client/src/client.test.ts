@@ -410,6 +410,28 @@ describe("GitHubClient", () => {
     });
   });
 
+  it("accepts valid timeline variants that omit node_id", async () => {
+    const client = new GitHubClient({
+      maxRetries: 0,
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {
+              event: "mentioned",
+              actor: null,
+              created_at: "2026-08-21T10:00:00Z",
+            },
+          ]),
+          { status: 200 },
+        ),
+      ),
+    });
+
+    await expect(client.listIssueTimeline(reference)).resolves.toMatchObject({
+      data: [{ nodeId: null, event: "mentioned" }],
+    });
+  });
+
   it("collects at most 100 recently updated pull requests", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(

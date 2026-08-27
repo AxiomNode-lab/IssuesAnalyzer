@@ -85,7 +85,7 @@ export type GitHubCommunityProfile = Readonly<{
 }>;
 
 export type GitHubIssueEvent = Readonly<{
-  nodeId: string;
+  nodeId: string | null;
   event: string;
   actor: GitHubActor | null;
   createdAt: Date;

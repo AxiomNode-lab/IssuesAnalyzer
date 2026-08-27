@@ -234,7 +234,10 @@ export function parseIssueEventPage(
   return value.map((entry) => {
     const source = object(entry);
     return {
-      nodeId: string(source.node_id, "timeline node id"),
+      nodeId:
+        source.node_id === undefined || source.node_id === null
+          ? null
+          : string(source.node_id, "timeline node id"),
       event: string(source.event, "timeline event"),
       actor: nullableActor(source.actor),
       createdAt: date(source.created_at, "timeline event date"),
