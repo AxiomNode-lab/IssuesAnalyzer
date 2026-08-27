@@ -1,11 +1,13 @@
 import { IssueAnalyzer } from "../components/issue-analyzer";
 
-const signals = [
-  ["Repository activity", "Recent commits, releases, and contribution readiness"],
-  ["Maintainer response", "Historical response patterns and review behavior"],
-  ["Competition", "Assignments, claims, references, and competing pull requests"],
-  ["Decision support", "A versioned score with confidence, warnings, and next action"],
-] as const;
+function LogoMark() {
+  return (
+    <span className="app-logo" aria-hidden="true">
+      <span className="app-logo-dot" />
+      <span className="app-logo-ring" />
+    </span>
+  );
+}
 
 export default function Home() {
   return (
@@ -14,45 +16,73 @@ export default function Home() {
         Skip to content
       </a>
       <header className="site-header">
-        <a className="brand" href="/" aria-label="GitHub Opportunity Radar home">
-          <span className="brand-mark" aria-hidden="true">
-            ⌁
+        <a className="brand" href="/" aria-label="Issue Analyzer home">
+          <LogoMark />
+          <span className="brand-copy">
+            <strong>Issue Analyzer</strong>
+            <small>Know before you code.</small>
           </span>
-          <span>Opportunity Radar</span>
+          <span className="beta-badge">Beta</span>
         </a>
-        <span className="version">MVP v0.1</span>
+
+        <nav className="top-nav" aria-label="Primary navigation">
+          <a href="#about">About</a>
+          <a href="#how-it-works">How it works</a>
+          <a className="signin-link" href="/api/auth/github/start">
+            Sign in
+          </a>
+        </nav>
       </header>
+
       <main id="main">
         <section className="hero" aria-labelledby="hero-title">
-          <p className="eyebrow">Evidence before effort</p>
-          <h1 id="hero-title">Know whether an issue deserves your time.</h1>
-          <p className="lede">
-            Paste a public GitHub Issue URL. The analyzer explains activity, responsiveness, visible
-            competition, confidence, and risk using live server-side GitHub evidence.
-          </p>
-          <IssueAnalyzer />
-        </section>
-        <section className="signals" aria-labelledby="signals-title">
-          <div className="section-heading">
-            <p className="eyebrow">The evidence ledger</p>
-            <h2 id="signals-title">One report. The signals that matter.</h2>
+          <div className="hero-glow" aria-hidden="true" />
+          <div className="hero-content">
+            <h1 id="hero-title">Know before you code.</h1>
+            <p className="lede">
+              Paste a public GitHub Issue URL and get instant insight into activity, competition,
+              responsiveness, actionability, and risk.
+            </p>
+            <IssueAnalyzer />
+            <p className="privacy-note">Only public GitHub data is analyzed. No code is accessed.</p>
+            <a className="scroll-cue" href="#results" aria-label="Scroll to analysis results">
+              ↓
+            </a>
           </div>
-          <div className="signal-grid">
-            {signals.map(([title, description], index) => (
-              <article className="signal-card" key={title}>
-                <span className="index" aria-hidden="true">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <h3>{title}</h3>
-                <p>{description}</p>
-              </article>
-            ))}
+        </section>
+
+        <section className="results-shell" id="results" aria-label="Analysis results">
+          <div className="results-intro">
+            <span>Analysis report</span>
+            <h2>Results overview</h2>
+          </div>
+          <p className="results-placeholder">
+            Your live analysis will appear here after you submit an issue URL above.
+          </p>
+        </section>
+
+        <section className="info-strip" id="how-it-works" aria-labelledby="how-title">
+          <div>
+            <span>01</span>
+            <h2 id="how-title">Paste an issue</h2>
+            <p>Use any public GitHub issue URL.</p>
+          </div>
+          <div>
+            <span>02</span>
+            <h2>We inspect the evidence</h2>
+            <p>Activity, competition, maintainer response, actionability, and freshness.</p>
+          </div>
+          <div id="about">
+            <span>03</span>
+            <h2>Make a better decision</h2>
+            <p>Get an explainable pursue, review carefully, or skip recommendation.</p>
           </div>
         </section>
       </main>
+
       <footer>
-        <span>GitHub Opportunity Radar</span>
-        <span>Recommendations are estimates, not guarantees.</span>
+        <span>Issue Analyzer</span>
+        <span>Decision support, not a guarantee.</span>
       </footer>
     </>
   );
