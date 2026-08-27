@@ -40,28 +40,43 @@ export default function Home() {
           <div className="hero-content">
             <h1 id="hero-title">Know before you code.</h1>
             <p className="lede">
-              Paste a public GitHub Issue URL and get instant insight into activity, competition,
-              responsiveness, actionability, and risk.
+              Paste a public GitHub Issue URL and get instant insight into
+              activity, competition, responsiveness, actionability, and risk.
             </p>
             <IssueAnalyzer />
-            <p className="privacy-note">Only public GitHub data is analyzed. No code is accessed.</p>
-            <a className="scroll-cue" href="#results" aria-label="Scroll to analysis results">
+            <p className="privacy-note">
+              Only public GitHub data is analyzed. No code is accessed.
+            </p>
+            <a
+              className="scroll-cue"
+              href="#results"
+              aria-label="Scroll to analysis results"
+            >
               ↓
             </a>
           </div>
         </section>
 
-        <section className="results-shell" id="results" aria-label="Analysis results">
+        <section
+          className="results-shell"
+          id="results"
+          aria-label="Analysis results"
+        >
           <div className="results-intro">
             <span>Analysis report</span>
             <h2>Results overview</h2>
           </div>
           <p className="results-placeholder">
-            Your live analysis will appear here after you submit an issue URL above.
+            Your live analysis will appear here after you submit an issue URL
+            above.
           </p>
         </section>
 
-        <section className="info-strip" id="how-it-works" aria-labelledby="how-title">
+        <section
+          className="info-strip"
+          id="how-it-works"
+          aria-labelledby="how-title"
+        >
           <div>
             <span>01</span>
             <h2 id="how-title">Paste an issue</h2>
@@ -70,12 +85,18 @@ export default function Home() {
           <div>
             <span>02</span>
             <h2>We inspect the evidence</h2>
-            <p>Activity, competition, maintainer response, actionability, and freshness.</p>
+            <p>
+              Activity, competition, maintainer response, actionability, and
+              freshness.
+            </p>
           </div>
           <div id="about">
             <span>03</span>
             <h2>Make a better decision</h2>
-            <p>Get an explainable pursue, review carefully, or skip recommendation.</p>
+            <p>
+              Get an explainable pursue, review carefully, or skip
+              recommendation.
+            </p>
           </div>
         </section>
       </main>
