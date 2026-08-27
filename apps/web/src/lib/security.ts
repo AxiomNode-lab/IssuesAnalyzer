@@ -31,7 +31,9 @@ export function securityHeaders(production: boolean): Record<string, string> {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
   };
-  if (production) headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+  if (production) {
+    headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
+  }
   return headers;
 }
 
@@ -63,7 +65,9 @@ export async function readBoundedJson<T>(
   const declared = request.headers.get("content-length");
   if (declared !== null) {
     const bytes = Number(declared);
-    if (!Number.isFinite(bytes) || bytes < 0) throw new Error("INVALID_CONTENT_LENGTH");
+    if (!Number.isFinite(bytes) || bytes < 0) {
+      throw new Error("INVALID_CONTENT_LENGTH");
+    }
     if (bytes > maxBytes) throw new Error("BODY_TOO_LARGE");
   }
 
@@ -98,7 +102,9 @@ export function safeExternalUrl(value: string): string | null {
   try {
     const url = new URL(value);
     if (url.protocol !== "https:") return null;
-    if (url.hostname !== "github.com" && url.hostname !== "avatars.githubusercontent.com") return null;
+    if (url.hostname !== "github.com" && url.hostname !== "avatars.githubusercontent.com") {
+      return null;
+    }
     if (url.username || url.password || url.port) return null;
     return url.toString();
   } catch {
