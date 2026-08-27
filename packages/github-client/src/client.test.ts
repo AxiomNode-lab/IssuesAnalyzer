@@ -432,6 +432,48 @@ describe("GitHubClient", () => {
     });
   });
 
+  it("preserves GitHub-confirmed pull request state from timeline cross-references", async () => {
+    const client = new GitHubClient({
+      maxRetries: 0,
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify([
+            {
+              node_id: "event-1",
+              event: "cross-referenced",
+              actor: null,
+              created_at: "2026-08-21T10:00:00Z",
+              source: {
+                type: "issue",
+                issue: {
+                  number: 99,
+                  title: "Implement fix",
+                  state: "open",
+                  draft: true,
+                  user: { login: "developer", html_url: "https://github.com/developer" },
+                  created_at: "2026-08-20T10:00:00Z",
+                  updated_at: "2026-08-21T10:00:00Z",
+                  closed_at: null,
+                  html_url: "https://github.com/octocat/Hello-World/pull/99",
+                  pull_request: { merged_at: null },
+                },
+              },
+            },
+          ]),
+          { status: 200 },
+        ),
+      ),
+    });
+
+    const result = await client.listIssueTimeline(reference);
+    expect(result.data[0]?.referencedPullRequest).toMatchObject({
+      number: 99,
+      state: "open",
+      draft: true,
+      htmlUrl: "https://github.com/octocat/Hello-World/pull/99",
+    });
+  });
+
   it("collects at most 100 recently updated pull requests", async () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(

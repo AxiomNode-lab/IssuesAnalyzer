@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@opportunity-radar/actionability-analyzer": "workspace:*",
     "@opportunity-radar/activity-analyzer": "workspace:*",
     "@opportunity-radar/competition-analyzer": "workspace:*",
     "@opportunity-radar/domain": "workspace:*",

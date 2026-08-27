@@ -8,12 +8,6 @@ export type CommentEvidence = Readonly<{
   createdAt: Date;
   sourceUrl: string;
 }>;
-export type TimelineEvidence = Readonly<{
-  event: string;
-  actor: ActorEvidence | null;
-  createdAt: Date;
-  sourceUrl: string;
-}>;
 export type PullRequestEvidence = Readonly<{
   number: number;
   title: string;
@@ -27,6 +21,13 @@ export type PullRequestEvidence = Readonly<{
   mergedAt: Date | null;
   sourceUrl: string;
 }>;
+export type TimelineEvidence = Readonly<{
+  event: string;
+  actor: ActorEvidence | null;
+  createdAt: Date;
+  sourceUrl: string;
+  referencedPullRequest?: PullRequestEvidence | null;
+}>;
 
 export type CompetitionInput = Readonly<{
   asOf: Date;
@@ -39,6 +40,10 @@ export type CompetitionInput = Readonly<{
   comments: readonly CommentEvidence[] | null;
   timeline: readonly TimelineEvidence[] | null;
   pullRequests: readonly PullRequestEvidence[] | null;
+  completeness?: Readonly<{
+    timeline: boolean;
+    pullRequests: boolean;
+  }>;
 }>;
 
 export type CompetitionFact = Readonly<{
@@ -55,7 +60,7 @@ export type CompetitionInference = Readonly<{
   caution: string;
 }>;
 export type CompetitionResult = Readonly<{
-  version: "competition-v1";
+  version: "competition-v2";
   status: CompetitionStatus;
   score: number;
   confidence: Readonly<{ level: ConfidenceLevel; value: number }>;
@@ -75,7 +80,6 @@ const MAX_TIMELINE_EVENTS = 300;
 const MAX_PULL_REQUESTS = 100;
 const CLAIM_PATTERN =
   /\b(?:i(?:'|’)d like to work on|i(?:'|’)ll work on|i am working on|i(?:'|’)m working on|working on this|let me work on|claim(?:ing)? this|can i work on)\b/i;
-const REFERENCE_EVENTS = new Set(["cross-referenced", "connected", "referenced"]);
 
 function validDate(value: Date, name: string): void {
   if (Number.isNaN(value.getTime())) throw new TypeError(`Invalid ${name} date.`);
@@ -108,14 +112,26 @@ function isBot(login: string): boolean {
   return login.toLowerCase().endsWith("[bot]");
 }
 
-function evidenceConfidence(sources: number): Readonly<{ level: ConfidenceLevel; value: number }> {
-  const value = Math.round((sources / 4) * 100);
-  return { level: value >= 75 ? "high" : value >= 50 ? "medium" : "low", value };
-}
-
 function referencesIssue(text: string, number: number, canonicalUrl: string): boolean {
   if (text.includes(canonicalUrl)) return true;
   return new RegExp(`(^|\\s)#${number}(?=\\s|$|[.,;:!?)}\\]])`).test(text);
+}
+
+function confidence(sources: number, incompleteSources: number) {
+  const value = Math.max(0, Math.round((sources / 4) * 100) - incompleteSources * 30);
+  return {
+    level: value >= 75 ? ("high" as const) : value >= 50 ? ("medium" as const) : ("low" as const),
+    value,
+  };
+}
+
+function validatePullRequest(pullRequest: PullRequestEvidence, asOf: Date): void {
+  historicalDate(pullRequest.createdAt, asOf, "pull request creation");
+  historicalDate(pullRequest.updatedAt, asOf, "pull request update");
+  if (pullRequest.closedAt !== null)
+    historicalDate(pullRequest.closedAt, asOf, "pull request closure");
+  if (pullRequest.mergedAt !== null)
+    historicalDate(pullRequest.mergedAt, asOf, "pull request merge");
 }
 
 export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
@@ -125,16 +141,11 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
 
   for (const comment of input.comments ?? [])
     historicalDate(comment.createdAt, input.asOf, "comment");
-  for (const event of input.timeline ?? [])
+  for (const event of input.timeline ?? []) {
     historicalDate(event.createdAt, input.asOf, "timeline event");
-  for (const pullRequest of input.pullRequests ?? []) {
-    historicalDate(pullRequest.createdAt, input.asOf, "pull request creation");
-    historicalDate(pullRequest.updatedAt, input.asOf, "pull request update");
-    if (pullRequest.closedAt !== null)
-      historicalDate(pullRequest.closedAt, input.asOf, "pull request closure");
-    if (pullRequest.mergedAt !== null)
-      historicalDate(pullRequest.mergedAt, input.asOf, "pull request merge");
+    if (event.referencedPullRequest) validatePullRequest(event.referencedPullRequest, input.asOf);
   }
+  for (const pullRequest of input.pullRequests ?? []) validatePullRequest(pullRequest, input.asOf);
 
   const comments = newestBounded(
     input.comments ?? [],
@@ -146,7 +157,7 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
     input.timeline ?? [],
     MAX_TIMELINE_EVENTS,
     (item) => item.createdAt,
-    (item) => `${item.event}:${item.sourceUrl}`,
+    (item) => `${item.event}:${item.sourceUrl}:${item.referencedPullRequest?.sourceUrl ?? ""}`,
   );
   const pullRequests = newestBounded(
     input.pullRequests ?? [],
@@ -154,7 +165,6 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
     (item) => item.updatedAt,
     (item) => item.sourceUrl,
   );
-
   const claimComments = comments.filter(
     (comment) =>
       comment.body !== null &&
@@ -162,18 +172,41 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
       !isBot(comment.author.login) &&
       CLAIM_PATTERN.test(comment.body),
   );
-  const linkedPullRequests = pullRequests.filter((pullRequest) =>
+  const explicitlyReferenced = pullRequests.filter((pullRequest) =>
     referencesIssue(
       `${pullRequest.title}\n${pullRequest.body ?? ""}`,
       input.issue.number,
       input.issue.canonicalUrl,
     ),
   );
-  const referenceEvents = timeline.filter((event) => REFERENCE_EVENTS.has(event.event));
-
-  const latestLinked = linkedPullRequests[0];
+  const timelinePullRequests = timeline.flatMap((event) =>
+    event.referencedPullRequest ? [event.referencedPullRequest] : [],
+  );
+  const linkedByUrl = new Map<string, PullRequestEvidence>();
+  for (const pullRequest of explicitlyReferenced)
+    linkedByUrl.set(pullRequest.sourceUrl, pullRequest);
+  for (const pullRequest of timelinePullRequests)
+    linkedByUrl.set(pullRequest.sourceUrl, pullRequest);
+  const linkedPullRequests = [...linkedByUrl.values()].sort(
+    (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
+  );
+  const activePullRequests = linkedPullRequests.filter(
+    (pullRequest) => pullRequest.state === "open",
+  );
+  const draftPullRequests = activePullRequests.filter((pullRequest) => pullRequest.draft);
+  const mergedPullRequests = linkedPullRequests.filter(
+    (pullRequest) => pullRequest.mergedAt !== null,
+  );
+  const closedPullRequests = linkedPullRequests.filter(
+    (pullRequest) => pullRequest.state === "closed" && pullRequest.mergedAt === null,
+  );
+  const nonPullRequestReferences = timeline.filter(
+    (event) =>
+      ["cross-referenced", "connected", "referenced"].includes(event.event) &&
+      !event.referencedPullRequest,
+  );
+  const freshestPullRequest = linkedPullRequests[0];
   const latestClaim = claimComments[0];
-  const latestReference = referenceEvents[0];
   const facts: CompetitionFact[] = [
     {
       key: "issue.assigneeCount",
@@ -185,25 +218,61 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
     {
       key: "competition.linkedPullRequestCount",
       value: linkedPullRequests.length,
-      sourceUrl: latestLinked?.sourceUrl ?? input.issue.canonicalUrl,
+      sourceUrl: freshestPullRequest?.sourceUrl ?? input.issue.canonicalUrl,
       observedAt: input.asOf,
-      freshnessDays:
-        latestLinked === undefined ? 0 : daysBetween(input.asOf, latestLinked.updatedAt),
+      freshnessDays: freshestPullRequest
+        ? daysBetween(input.asOf, freshestPullRequest.updatedAt)
+        : 0,
+    },
+    {
+      key: "competition.activePullRequestCount",
+      value: activePullRequests.length,
+      sourceUrl: activePullRequests[0]?.sourceUrl ?? input.issue.canonicalUrl,
+      observedAt: input.asOf,
+      freshnessDays: activePullRequests[0]
+        ? daysBetween(input.asOf, activePullRequests[0].updatedAt)
+        : 0,
+    },
+    {
+      key: "competition.draftPullRequestCount",
+      value: draftPullRequests.length,
+      sourceUrl: draftPullRequests[0]?.sourceUrl ?? input.issue.canonicalUrl,
+      observedAt: input.asOf,
+      freshnessDays: draftPullRequests[0]
+        ? daysBetween(input.asOf, draftPullRequests[0].updatedAt)
+        : 0,
+    },
+    {
+      key: "competition.mergedPullRequestCount",
+      value: mergedPullRequests.length,
+      sourceUrl: mergedPullRequests[0]?.sourceUrl ?? input.issue.canonicalUrl,
+      observedAt: input.asOf,
+      freshnessDays: mergedPullRequests[0]?.mergedAt
+        ? daysBetween(input.asOf, mergedPullRequests[0].mergedAt)
+        : 0,
+    },
+    {
+      key: "competition.closedPullRequestCount",
+      value: closedPullRequests.length,
+      sourceUrl: closedPullRequests[0]?.sourceUrl ?? input.issue.canonicalUrl,
+      observedAt: input.asOf,
+      freshnessDays: closedPullRequests[0]?.closedAt
+        ? daysBetween(input.asOf, closedPullRequests[0].closedAt)
+        : 0,
     },
     {
       key: "competition.claimCommentCount",
       value: claimComments.length,
       sourceUrl: latestClaim?.sourceUrl ?? input.issue.canonicalUrl,
       observedAt: input.asOf,
-      freshnessDays: latestClaim === undefined ? 0 : daysBetween(input.asOf, latestClaim.createdAt),
+      freshnessDays: latestClaim ? daysBetween(input.asOf, latestClaim.createdAt) : 0,
     },
     {
-      key: "competition.referenceEventCount",
-      value: referenceEvents.length,
-      sourceUrl: latestReference?.sourceUrl ?? input.issue.canonicalUrl,
+      key: "competition.nonPullRequestReferenceCount",
+      value: nonPullRequestReferences.length,
+      sourceUrl: input.issue.canonicalUrl,
       observedAt: input.asOf,
-      freshnessDays:
-        latestReference === undefined ? 0 : daysBetween(input.asOf, latestReference.createdAt),
+      freshnessDays: 0,
     },
   ];
 
@@ -215,12 +284,21 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
       basisFactKeys: ["issue.assigneeCount"],
       caution: "Assignment is visible evidence, but it does not prove work is still active.",
     });
-  if (linkedPullRequests.length > 0)
+  if (activePullRequests.length > 0)
     inferences.push({
-      key: "competition.linkedPullRequest",
+      key: "competition.activeImplementation",
       value: true,
-      basisFactKeys: ["competition.linkedPullRequestCount"],
-      caution: "A linked pull request may be incomplete, abandoned, or incorrect.",
+      basisFactKeys: ["competition.activePullRequestCount", "competition.draftPullRequestCount"],
+      caution:
+        "An open or draft linked pull request is active visible work, but it may still be abandoned.",
+    });
+  else if (mergedPullRequests.length + closedPullRequests.length > 0)
+    inferences.push({
+      key: "competition.historicalImplementation",
+      value: true,
+      basisFactKeys: ["competition.mergedPullRequestCount", "competition.closedPullRequestCount"],
+      caution:
+        "Closed or merged work is historical evidence and is weaker than an active implementation.",
     });
   if (claimComments.length > 0)
     inferences.push({
@@ -229,35 +307,33 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
       basisFactKeys: ["competition.claimCommentCount"],
       caution: "Claim language indicates intent only; it does not establish ownership or progress.",
     });
-  if (referenceEvents.length > 0)
-    inferences.push({
-      key: "competition.referencedActivity",
-      value: true,
-      basisFactKeys: ["competition.referenceEventCount"],
-      caution: "A timeline reference can indicate related activity without proving competing work.",
-    });
   if (
     input.issue.assignees.length === 0 &&
-    linkedPullRequests.length === 0 &&
-    claimComments.length === 0 &&
-    referenceEvents.length === 0
+    activePullRequests.length === 0 &&
+    claimComments.length === 0
   )
     inferences.push({
-      key: "competition.noneVisible",
+      key: "competition.noneActiveVisible",
       value: true,
       basisFactKeys: [
         "issue.assigneeCount",
-        "competition.linkedPullRequestCount",
+        "competition.activePullRequestCount",
         "competition.claimCommentCount",
-        "competition.referenceEventCount",
       ],
-      caution: "No visible signal does not guarantee nobody else is working on the issue.",
+      caution: "No active visible signal does not guarantee nobody is working privately.",
     });
 
+  const completeness = input.completeness ?? { timeline: true, pullRequests: true };
   const warnings: string[] = [];
   if (input.comments === null) warnings.push("Comment evidence is unavailable.");
   if (input.timeline === null) warnings.push("Timeline evidence is unavailable.");
   if (input.pullRequests === null) warnings.push("Pull request evidence is unavailable.");
+  if (!completeness.timeline)
+    warnings.push(
+      "Timeline evidence reached its collection bound; additional linked work may exist.",
+    );
+  if (!completeness.pullRequests)
+    warnings.push("Repository pull request evidence reached its collection bound.");
   if ((input.comments?.length ?? 0) > MAX_COMMENTS)
     warnings.push("Comment evidence was bounded to 500 records.");
   if ((input.timeline?.length ?? 0) > MAX_TIMELINE_EVENTS)
@@ -265,32 +341,41 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
   if ((input.pullRequests?.length ?? 0) > MAX_PULL_REQUESTS)
     warnings.push("Pull request evidence was bounded to 100 records.");
 
-  const confidence = evidenceConfidence(
+  const evidenceConfidence = confidence(
     1 +
       Number(input.comments !== null) +
       Number(input.timeline !== null) +
       Number(input.pullRequests !== null),
+    Number(input.timeline !== null && !completeness.timeline) +
+      Number(input.pullRequests !== null && !completeness.pullRequests),
   );
   const score = Math.max(
-    linkedPullRequests.length > 0 ? 90 : 0,
+    activePullRequests.length >= 3
+      ? 100
+      : activePullRequests.length === 2
+        ? 90
+        : activePullRequests.length === 1
+          ? 80
+          : 0,
     input.issue.assignees.length > 0 ? 75 : 0,
     claimComments.length > 0 ? 50 : 0,
-    referenceEvents.length > 0 ? 35 : 0,
+    mergedPullRequests.length > 0 ? 20 : 0,
+    closedPullRequests.length > 0 ? 10 : 0,
   );
   const status: CompetitionStatus =
-    linkedPullRequests.length > 0 || input.issue.assignees.length > 0
+    activePullRequests.length > 0 || input.issue.assignees.length > 0
       ? "visible"
-      : claimComments.length > 0 || referenceEvents.length > 0
+      : claimComments.length > 0 || mergedPullRequests.length + closedPullRequests.length > 0
         ? "possible"
         : input.comments === null && input.timeline === null && input.pullRequests === null
           ? "uncertain"
           : "none_visible";
 
   return {
-    version: "competition-v1",
+    version: "competition-v2",
     status,
     score,
-    confidence,
+    confidence: evidenceConfidence,
     facts,
     inferences,
     warnings,

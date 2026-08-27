@@ -90,6 +90,20 @@ export type GitHubIssueEvent = Readonly<{
   actor: GitHubActor | null;
   createdAt: Date;
   sourceUrl: string;
+  referencedPullRequest: GitHubReferencedPullRequest | null;
+}>;
+
+export type GitHubReferencedPullRequest = Readonly<{
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  draft: boolean;
+  author: GitHubActor;
+  createdAt: Date;
+  updatedAt: Date;
+  closedAt: Date | null;
+  mergedAt: Date | null;
+  htmlUrl: string;
 }>;
 
 export type GitHubPullRequestEvidence = Readonly<{

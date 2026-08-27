@@ -23,6 +23,7 @@ export type {
   GitHubIssueEvent,
   GitHubPullRequestEvidence,
   GitHubQuota,
+  GitHubReferencedPullRequest,
   GitHubReleaseEvidence,
   GitHubRepository,
   GitHubResponse,

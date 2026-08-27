@@ -41,6 +41,7 @@ export type AnalysisReportModel = Readonly<{
   partial: boolean;
   stale: boolean;
   nextAction: string;
+  decisionReason: string;
   components: readonly ReportComponent[];
   risks: readonly string[];
 }>;
@@ -75,6 +76,8 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
           <small>{report.scoreVersion}</small>
         </div>
       </header>
+
+      <p className="report-decision-reason">{report.decisionReason}</p>
 
       {(report.partial || report.stale) && (
         <div className="report-state" role="status" aria-label="Report limitations">

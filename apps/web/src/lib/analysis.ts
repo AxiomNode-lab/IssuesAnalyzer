@@ -1,3 +1,5 @@
+import { analyzeIssueActionability } from "@opportunity-radar/actionability-analyzer";
+import type { ActionabilityResult } from "@opportunity-radar/actionability-analyzer";
 import { analyzeRepositoryActivity } from "@opportunity-radar/activity-analyzer";
 import type { RepositoryActivityResult } from "@opportunity-radar/activity-analyzer";
 import { analyzeCompetition } from "@opportunity-radar/competition-analyzer";
@@ -94,8 +96,19 @@ function factLabel(key: string): string {
     "repository.readinessSignals": "Contribution-readiness signals",
     "issue.assigneeCount": "Issue assignees",
     "competition.linkedPullRequestCount": "Linked pull requests",
+    "competition.activePullRequestCount": "Active linked pull requests",
+    "competition.draftPullRequestCount": "Draft linked pull requests",
+    "competition.mergedPullRequestCount": "Merged linked pull requests",
+    "competition.closedPullRequestCount": "Closed unmerged linked pull requests",
     "competition.claimCommentCount": "Visible claim comments",
-    "competition.referenceEventCount": "Timeline references",
+    "competition.nonPullRequestReferenceCount": "Non-PR timeline references",
+    "actionability.labels": "Issue labels",
+    "actionability.discussionLabelCount": "Discussion-oriented labels",
+    "actionability.alternativeCount": "Unresolved numbered alternatives",
+    "actionability.acceptedDirection": "Accepted implementation direction",
+    "actionability.acceptanceCriteria": "Acceptance criteria detected",
+    "actionability.concreteRequest": "Concrete implementation request",
+    "actionability.trackingIssue": "Tracking or umbrella scope",
     "responsiveness.sampleSize": "Historical sample",
     "responsiveness.respondedThreads": "Threads with maintainer response",
     "responsiveness.responseCoveragePercent": "Response coverage percent",
@@ -117,7 +130,7 @@ function activityComponent(result: RepositoryActivityResult): ReportComponent {
     key: "activity",
     label: "Repository activity",
     score: result.score,
-    weight: 0.3,
+    weight: 0.2,
     confidence: result.confidence.level,
     reason: `Repository activity is classified as ${result.status.replace("_", " ")}.`,
     facts: result.facts.map((fact): ReportEvidence => ({
@@ -135,7 +148,7 @@ function competitionComponent(result: CompetitionResult): ReportComponent {
     key: "competition",
     label: "Visible competition",
     score: result.score,
-    weight: 0.4,
+    weight: 0.25,
     confidence: result.confidence.level,
     reason: `Visible competition is classified as ${result.status.replace("_", " ")}.`,
     facts: result.facts.map((fact): ReportEvidence => ({
@@ -158,7 +171,7 @@ function responsivenessComponent(result: ResponsivenessResult): ReportComponent 
     key: "responsiveness",
     label: "Maintainer responsiveness",
     score: result.score,
-    weight: 0.3,
+    weight: 0.15,
     confidence: result.confidence.level,
     reason: `Historical maintainer responsiveness is classified as ${result.status}.`,
     facts: result.facts.map((fact): ReportEvidence => ({
@@ -166,6 +179,29 @@ function responsivenessComponent(result: ResponsivenessResult): ReportComponent 
       value: valueLabel(fact.value),
       sourceUrl: fact.sourceUrl,
       freshnessDays: 0,
+    })),
+    inferences: result.inferences.map((inference): ReportInference => ({
+      label: inferenceLabel(inference.key),
+      value: valueLabel(inference.value),
+      caution: inference.caution,
+    })),
+    warnings: result.warnings,
+  };
+}
+
+function actionabilityComponent(result: ActionabilityResult): ReportComponent {
+  return {
+    key: "actionability",
+    label: "Issue actionability",
+    score: result.score,
+    weight: 0.4,
+    confidence: result.confidence.level,
+    reason: `Issue actionability is classified as ${result.status}.`,
+    facts: result.facts.map((fact): ReportEvidence => ({
+      label: factLabel(fact.key),
+      value: valueLabel(fact.value),
+      sourceUrl: fact.sourceUrl,
+      freshnessDays: fact.freshnessDays,
     })),
     inferences: result.inferences.map((inference): ReportInference => ({
       label: inferenceLabel(inference.key),
@@ -204,6 +240,7 @@ function nextAction(decision: "pursue" | "review_carefully" | "skip"): string {
 function hardWarnings(
   issue: GitHubIssue,
   repository: { archived: boolean; disabled: boolean },
+  actionability: ActionabilityResult,
 ): HardWarningInput[] {
   const warnings: HardWarningInput[] = [];
   if (repository.archived)
@@ -223,6 +260,13 @@ function hardWarnings(
       key: "issue_closed",
       evidenceKeys: ["issue.state"],
       reason: "The issue is closed.",
+    });
+  if (actionability.status === "low" && actionability.confidence.level === "high")
+    warnings.push({
+      key: "issue_low_actionability",
+      evidenceKeys: actionability.facts.map((fact) => fact.key),
+      reason:
+        "The issue is currently a high-confidence low-actionability discussion or planning item, not a contribution-ready implementation task.",
     });
   return warnings;
 }
@@ -292,17 +336,38 @@ async function buildReport(
         actor: event.actor,
         createdAt: event.createdAt,
         sourceUrl: event.sourceUrl,
+        referencedPullRequest:
+          event.referencedPullRequest === null
+            ? null
+            : {
+                ...event.referencedPullRequest,
+                body: null,
+                sourceUrl: event.referencedPullRequest.htmlUrl,
+              },
       })) ?? null,
     pullRequests:
       pullRequests?.map((pullRequest: GitHubPullRequestEvidence) => ({
         ...pullRequest,
         sourceUrl: pullRequest.htmlUrl,
       })) ?? null,
+    completeness: {
+      timeline: timeline === null || timeline.length < 200,
+      pullRequests: pullRequests === null || pullRequests.length < 100,
+    },
   });
   const responsiveness = analyzeMaintainerResponsiveness({
     asOf,
     repositoryUrl: repository.htmlUrl,
     threads: commentsAsThread(issue, comments),
+  });
+  const actionability = analyzeIssueActionability({
+    asOf,
+    issue: {
+      title: issue.title,
+      body: issue.body,
+      labels: issue.labels,
+      canonicalUrl: reference.canonicalUrl,
+    },
   });
   const score = calculateOpportunityScore({
     components: [
@@ -330,13 +395,22 @@ async function buildReport(
         reason: `Maintainer responsiveness is ${responsiveness.status}.`,
         warnings: responsiveness.warnings,
       },
+      {
+        key: "actionability",
+        score: actionability.score,
+        confidence: actionability.confidence,
+        evidenceKeys: actionability.facts.map((fact) => fact.key),
+        reason: `Issue actionability is ${actionability.status}.`,
+        warnings: actionability.warnings,
+      },
     ],
-    hardWarnings: hardWarnings(issue, repository),
+    hardWarnings: hardWarnings(issue, repository, actionability),
   });
   const components = [
     activityComponent(activity),
     competitionComponent(competition),
     responsivenessComponent(responsiveness),
+    actionabilityComponent(actionability),
   ];
   const risks = [...score.warnings, ...score.hardWarningsApplied.map((warning) => warning.reason)];
 
@@ -353,6 +427,7 @@ async function buildReport(
     partial: components.some((component) => (component.warnings?.length ?? 0) > 0),
     stale: false,
     nextAction: nextAction(score.decision),
+    decisionReason: score.decisionReason,
     components,
     risks: [...new Set(risks)],
   };

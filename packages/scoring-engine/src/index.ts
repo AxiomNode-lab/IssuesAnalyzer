@@ -1,9 +1,10 @@
-export const SCORE_VERSION = "opportunity-score-v1" as const;
+export const SCORE_VERSION = "opportunity-score-v2" as const;
 
 export type ConfidenceLevel = "high" | "medium" | "low";
-export type ComponentKey = "activity" | "competition" | "responsiveness";
+export type ComponentKey = "activity" | "competition" | "responsiveness" | "actionability";
 export type Decision = "pursue" | "review_carefully" | "skip";
-export type HardWarningKey = "repository_archived" | "repository_disabled" | "issue_closed";
+export type HardWarningKey =
+  "repository_archived" | "repository_disabled" | "issue_closed" | "issue_low_actionability";
 
 export type ScoreComponentInput = Readonly<{
   key: ComponentKey;
@@ -51,18 +52,26 @@ export type OpportunityScoreResult = Readonly<{
   components: readonly ScoreComponent[];
   warnings: readonly string[];
   hardWarningsApplied: readonly AppliedHardWarning[];
+  decisionReason: string;
 }>;
 
-const ORDER: readonly ComponentKey[] = ["activity", "competition", "responsiveness"];
+const ORDER: readonly ComponentKey[] = [
+  "activity",
+  "competition",
+  "responsiveness",
+  "actionability",
+];
 const WEIGHTS: Readonly<Record<ComponentKey, number>> = {
-  activity: 0.3,
-  competition: 0.4,
-  responsiveness: 0.3,
+  activity: 0.2,
+  competition: 0.25,
+  responsiveness: 0.15,
+  actionability: 0.4,
 };
 const HARD_WARNING_CAPS: Readonly<Record<HardWarningKey, number>> = {
   repository_archived: 0,
   repository_disabled: 0,
   issue_closed: 20,
+  issue_low_actionability: 39,
 };
 
 function assertScore(value: number, name: string): void {
@@ -83,10 +92,33 @@ function decision(score: number): Decision {
   return score >= 70 ? "pursue" : score >= 40 ? "review_carefully" : "skip";
 }
 
+function decisionReason(
+  result: Readonly<{
+    score: number;
+    components: readonly ScoreComponent[];
+    hardWarnings: readonly AppliedHardWarning[];
+  }>,
+): string {
+  const gate = result.hardWarnings.find((warning) => warning.key === "issue_low_actionability");
+  if (gate) return gate.reason;
+  const actionability = result.components.find((component) => component.key === "actionability")!;
+  const competition = result.components.find((component) => component.key === "competition")!;
+  const activity = result.components.find((component) => component.key === "activity")!;
+  if (competition.rawScore >= 80)
+    return "Active competing implementation work is visible; review it before investing effort.";
+  if (result.score >= 70)
+    return "The repository is active, the issue appears actionable, and no strong active competition was detected.";
+  if (actionability.rawScore < 70)
+    return "The issue is not yet clearly contribution-ready; confirm scope and implementation direction first.";
+  if (activity.rawScore < 50)
+    return "The issue may be actionable, but repository activity is weak or uncertain.";
+  return "The available evidence is mixed; review the highlighted risks before starting work.";
+}
+
 export function calculateOpportunityScore(input: OpportunityScoreInput): OpportunityScoreResult {
   if (input.components.length !== ORDER.length)
     throw new TypeError(
-      "Exactly one activity, competition, and responsiveness component is required.",
+      "Exactly one activity, competition, responsiveness, and actionability component is required.",
     );
 
   const byKey = new Map<ComponentKey, ScoreComponentInput>();
@@ -146,6 +178,7 @@ export function calculateOpportunityScore(input: OpportunityScoreInput): Opportu
     100,
   );
   const score = Math.min(uncappedScore, scoreCap);
+  const explanation = decisionReason({ score, components, hardWarnings: hardWarningsApplied });
 
   return {
     version: SCORE_VERSION,
@@ -156,5 +189,6 @@ export function calculateOpportunityScore(input: OpportunityScoreInput): Opportu
     components,
     warnings: components.flatMap((component) => component.warnings),
     hardWarningsApplied,
+    decisionReason: explanation,
   };
 }
