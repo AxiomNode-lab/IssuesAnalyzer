@@ -28,6 +28,14 @@
   margin-top: 2rem;
 }
 
+.report-decision-reason {
+  margin: 0;
+  padding: 1rem 1.25rem;
+  border-left: 4px solid var(--bronze);
+  background: var(--bronze-soft);
+  font-weight: 700;
+}
+
 .report-header {
   display: grid;
   grid-template-columns: 1fr auto;

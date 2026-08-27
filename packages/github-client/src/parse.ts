@@ -7,6 +7,7 @@ import type {
   GitHubIssueComment,
   GitHubIssueEvent,
   GitHubPullRequestEvidence,
+  GitHubReferencedPullRequest,
   GitHubReleaseEvidence,
   GitHubRepository,
 } from "./types";
@@ -81,6 +82,34 @@ function filePresent(value: unknown): boolean {
   if (value === null) return false;
   object(value);
   return true;
+}
+
+function referencedPullRequest(value: unknown): GitHubReferencedPullRequest | null {
+  if (value === undefined || value === null) return null;
+  const source = object(value);
+  if (source.type !== "issue" || source.issue === undefined || source.issue === null) return null;
+  const issue = object(source.issue);
+  if (issue.pull_request === undefined || issue.pull_request === null) return null;
+  const pullRequest = object(issue.pull_request);
+  const state = string(issue.state, "referenced pull request state");
+  if (state !== "open" && state !== "closed") {
+    throw new GitHubClientError(
+      "invalid_payload",
+      "GitHub returned an invalid referenced pull request state.",
+    );
+  }
+  return {
+    number: number(issue.number, "referenced pull request number"),
+    title: string(issue.title, "referenced pull request title"),
+    state,
+    draft: boolean(issue.draft, "referenced pull request draft state"),
+    author: actor(issue.user),
+    createdAt: date(issue.created_at, "referenced pull request creation date"),
+    updatedAt: date(issue.updated_at, "referenced pull request update date"),
+    closedAt: nullableDate(issue.closed_at, "referenced pull request closure date"),
+    mergedAt: nullableDate(pullRequest.merged_at, "referenced pull request merge date"),
+    htmlUrl: string(issue.html_url, "referenced pull request URL"),
+  };
 }
 
 export function parseIssue(value: unknown): GitHubIssue {
@@ -242,6 +271,7 @@ export function parseIssueEventPage(
       actor: nullableActor(source.actor),
       createdAt: date(source.created_at, "timeline event date"),
       sourceUrl,
+      referencedPullRequest: referencedPullRequest(source.source),
     };
   });
 }

@@ -75,7 +75,7 @@ describe("analyzeCompetition", () => {
       }),
     );
     expect(result.status).toBe("visible");
-    expect(result.score).toBe(90);
+    expect(result.score).toBe(80);
     expect(result.facts).toContainEqual(
       expect.objectContaining({ key: "competition.linkedPullRequestCount", value: 1 }),
     );
@@ -111,7 +111,7 @@ describe("analyzeCompetition", () => {
     expect(result.status).toBe("none_visible");
     expect(result.inferences).toContainEqual(
       expect.objectContaining({
-        key: "competition.noneVisible",
+        key: "competition.noneActiveVisible",
         caution: expect.stringContaining("does not guarantee"),
       }),
     );
@@ -126,10 +126,71 @@ describe("analyzeCompetition", () => {
     expect(result.warnings).toHaveLength(3);
   });
 
-  it("uses relevant timeline references as possible evidence", () => {
+  it("does not inflate competition for timeline references that are not pull requests", () => {
     const result = analyzeCompetition(input({ timeline: [event("cross-referenced")] }));
+    expect(result.status).toBe("none_visible");
+    expect(result.score).toBe(0);
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({ key: "competition.nonPullRequestReferenceCount", value: 1 }),
+    );
+  });
+
+  it("uses GitHub-confirmed timeline PRs and distinguishes active, draft, and historical work", () => {
+    const active = pullRequest(null);
+    const draft = {
+      ...pullRequest("Closes #42"),
+      number: 8,
+      draft: true,
+      sourceUrl: "https://github.com/example/project/pull/8",
+    };
+    const merged = {
+      ...pullRequest(null),
+      number: 9,
+      state: "closed" as const,
+      closedAt: new Date("2026-08-25T00:00:00.000Z"),
+      mergedAt: new Date("2026-08-25T00:00:00.000Z"),
+      sourceUrl: "https://github.com/example/project/pull/9",
+    };
+    const result = analyzeCompetition(
+      input({
+        timeline: [
+          { ...event("cross-referenced"), referencedPullRequest: active },
+          { ...event("cross-referenced"), referencedPullRequest: draft },
+          { ...event("cross-referenced"), referencedPullRequest: merged },
+        ],
+      }),
+    );
+    expect(result.score).toBe(90);
+    expect(result.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "competition.activePullRequestCount", value: 2 }),
+        expect.objectContaining({ key: "competition.draftPullRequestCount", value: 1 }),
+        expect.objectContaining({ key: "competition.mergedPullRequestCount", value: 1 }),
+      ]),
+    );
+  });
+
+  it("treats only old merged or closed PRs as weaker historical competition", () => {
+    const historical = {
+      ...pullRequest("Closes #42"),
+      state: "closed" as const,
+      closedAt: new Date("2026-08-25T00:00:00.000Z"),
+      mergedAt: new Date("2026-08-25T00:00:00.000Z"),
+    };
+    const result = analyzeCompetition(input({ pullRequests: [historical] }));
     expect(result.status).toBe("possible");
-    expect(result.score).toBe(35);
+    expect(result.score).toBe(20);
+  });
+
+  it("reduces confidence when linked-PR evidence reached a collection bound", () => {
+    const result = analyzeCompetition(
+      input({ completeness: { timeline: false, pullRequests: false } }),
+    );
+    expect(result.score).toBe(0);
+    expect(result.confidence).toEqual({ level: "low", value: 40 });
+    expect(result.warnings).toContain(
+      "Timeline evidence reached its collection bound; additional linked work may exist.",
+    );
   });
 
   it("bounds every evidence window after selecting newest records", () => {

@@ -1,5 +1,9 @@
 import { GitHubClientError, StaleWhileRevalidateCache } from "@opportunity-radar/github-client";
-import type { GitHubQuota, GitHubResponse } from "@opportunity-radar/github-client";
+import type {
+  GitHubIssueEvent,
+  GitHubQuota,
+  GitHubResponse,
+} from "@opportunity-radar/github-client";
 import { describe, expect, it, vi } from "vitest";
 
 import { createAnalysisService, InvalidAnalysisInputError } from "./analysis";
@@ -83,7 +87,7 @@ function evidenceClient() {
         pullRequestTemplate: true,
       }),
     ),
-    listIssueTimeline: vi.fn(async () => response([])),
+    listIssueTimeline: vi.fn(async () => response<GitHubIssueEvent[]>([])),
     listRecentPullRequests: vi.fn(async () => response([])),
   };
 }
@@ -100,16 +104,99 @@ describe("live analysis orchestration", () => {
       issueNumber: 27888,
       issueTitle: "Real issue title",
       issueUrl: referenceUrl,
-      scoreVersion: "opportunity-score-v1",
+      scoreVersion: "opportunity-score-v2",
       stale: false,
     });
     expect(report.components.map((component) => component.key)).toEqual([
       "activity",
       "competition",
       "responsiveness",
+      "actionability",
     ]);
     expect(report.components.every((component) => Number.isInteger(component.score))).toBe(true);
     for (const method of Object.values(client)) expect(method).toHaveBeenCalledOnce();
+  });
+
+  it("allows an active, unopposed, concrete coding task to produce Pursue", async () => {
+    const client = evidenceClient();
+    client.getIssue.mockResolvedValueOnce(
+      response({
+        ...(await evidenceClient().getIssue()).data,
+        title: "Fix parser behavior for empty input",
+        body: "Steps to reproduce: call `parseInput`. Expected behavior: return an empty result.",
+        labels: ["bug", "good first issue"],
+      }),
+    );
+    const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
+    expect(report.verdict).toBe("pursue");
+  });
+
+  it("gates a Node.js-style unresolved policy discussion so it cannot produce Pursue", async () => {
+    const client = evidenceClient();
+    client.getIssue.mockResolvedValueOnce(
+      response({
+        ...(await evidenceClient().getIssue()).data,
+        title: 'Improve how we handle active "good first issue" issues',
+        labels: ["meta", "discuss"],
+        body: `### Potential improvements
+There are several approaches worth considering. I'd be happy to hear other approaches though.
+#### 1. Use a different label
+#### 2. Remove the label when a PR exists
+#### 3. Create a claim system`,
+      }),
+    );
+    const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
+    expect(report.verdict).not.toBe("pursue");
+    expect(report.score).toBeLessThanOrEqual(39);
+    expect(report.decisionReason).toContain("low-actionability discussion");
+  });
+
+  it("does not permanently gate a discussion after an accepted implementation direction", async () => {
+    const client = evidenceClient();
+    client.getIssue.mockResolvedValueOnce(
+      response({
+        ...(await evidenceClient().getIssue()).data,
+        title: "Meta: select parser behavior",
+        labels: ["meta", "discuss"],
+        body: "We have decided on the strict parser. Please implement `parseInput`. Expected behavior: return a typed error.",
+      }),
+    );
+    const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
+    expect(report.score).toBeGreaterThan(39);
+    expect(report.risks).not.toContainEqual(expect.stringContaining("low-actionability"));
+  });
+
+  it("counts a SymPy-style active timeline PR instead of reporting zero linked work", async () => {
+    const client = evidenceClient();
+    client.listIssueTimeline.mockResolvedValueOnce(
+      response([
+        {
+          nodeId: "event-1",
+          event: "cross-referenced",
+          actor: null,
+          createdAt: new Date("2026-08-25T00:00:00.000Z"),
+          sourceUrl: referenceUrl,
+          referencedPullRequest: {
+            number: 29942,
+            title: "Implement refine handler",
+            state: "open" as const,
+            draft: true,
+            author: { login: "contributor", profileUrl: "https://github.com/contributor" },
+            createdAt: new Date("2026-08-20T00:00:00.000Z"),
+            updatedAt: new Date("2026-08-25T00:00:00.000Z"),
+            closedAt: null,
+            mergedAt: null,
+            htmlUrl: "https://github.com/sympy/sympy/pull/29942",
+          },
+        },
+      ]),
+    );
+    const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
+    const competition = report.components.find((component) => component.key === "competition")!;
+    expect(competition.score).toBe(80);
+    expect(competition.facts).toContainEqual(
+      expect.objectContaining({ label: "Active linked pull requests", value: "1" }),
+    );
   });
 
   it("rejects unsafe URLs before calling GitHub", async () => {

@@ -10,13 +10,14 @@ const report: AnalysisReportModel = {
   issueTitle: "Example issue",
   issueUrl: "https://github.com/owner/repo/issues/42",
   score: 64,
-  scoreVersion: "opportunity-score-v1",
+  scoreVersion: "opportunity-score-v2",
   verdict: "review_carefully",
   confidence: "medium",
   generatedAt: "2026-08-26T09:00:00.000Z",
   partial: true,
   stale: true,
   nextAction: "Confirm the issue is still available.",
+  decisionReason: "The available evidence is mixed.",
   risks: ["Historical evidence is limited."],
   components: [
     {
@@ -72,6 +73,7 @@ describe("AnalysisReport", () => {
     expect(html).toContain("64 / 100");
     expect(html).toContain("Medium");
     expect(html).toContain("Confirm the issue is still available.");
+    expect(html).toContain("The available evidence is mixed.");
     expect(html).toContain("Historical evidence is limited.");
     expect(html).toContain("not a guarantee of response, acceptance, payment, or completion time");
   });

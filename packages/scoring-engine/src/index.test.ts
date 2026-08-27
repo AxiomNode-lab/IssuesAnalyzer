@@ -25,12 +25,18 @@ function component(
   };
 }
 
-function input(activity = 80, competition = 20, responsiveness = 80): OpportunityScoreInput {
+function input(
+  activity = 80,
+  competition = 20,
+  responsiveness = 80,
+  actionability = 80,
+): OpportunityScoreInput {
   return {
     components: [
       component("responsiveness", responsiveness),
       component("activity", activity),
       component("competition", competition),
+      component("actionability", actionability),
     ],
   };
 }
@@ -46,12 +52,13 @@ describe("calculateOpportunityScore", () => {
       "activity",
       "competition",
       "responsiveness",
+      "actionability",
     ]);
     expect(result.components[1]).toMatchObject({
       rawScore: 20,
       normalizedScore: 80,
-      weight: 0.4,
-      weightedPoints: 32,
+      weight: 0.25,
+      weightedPoints: 20,
       evidenceKeys: ["competition.evidence"],
       reason: "competition reason",
     });
@@ -70,12 +77,14 @@ describe("calculateOpportunityScore", () => {
     [40, "review_carefully"],
     [39, "skip"],
   ] as const)("maps score %i to %s", (target, expected) => {
-    expect(calculateOpportunityScore(input(target, 100 - target, target)).decision).toBe(expected);
+    expect(calculateOpportunityScore(input(target, 100 - target, target, target)).decision).toBe(
+      expected,
+    );
   });
 
   it("inverts competition because a higher analyzer score means more competition", () => {
-    expect(calculateOpportunityScore(input(50, 0, 50)).score).toBe(70);
-    expect(calculateOpportunityScore(input(50, 100, 50)).score).toBe(30);
+    expect(calculateOpportunityScore(input(50, 0, 50, 50)).score).toBe(63);
+    expect(calculateOpportunityScore(input(50, 100, 50, 50)).score).toBe(38);
   });
 
   it("preserves component warnings and calculates weighted confidence", () => {
@@ -87,11 +96,12 @@ describe("calculateOpportunityScore", () => {
     }));
     const result = calculateOpportunityScore({ components });
 
-    expect(result.confidence).toEqual({ level: "low", value: 17 });
+    expect(result.confidence).toEqual({ level: "low", value: 19 });
     expect(result.warnings).toEqual([
       "activity warning",
       "competition warning",
       "responsiveness warning",
+      "actionability warning",
     ]);
   });
 
@@ -99,9 +109,10 @@ describe("calculateOpportunityScore", () => {
     ["repository_archived", 0],
     ["repository_disabled", 0],
     ["issue_closed", 20],
+    ["issue_low_actionability", 39],
   ] as const)("applies the %s hard-warning cap", (key, cap) => {
     const result = calculateOpportunityScore({
-      ...input(100, 0, 100),
+      ...input(100, 0, 100, 100),
       hardWarnings: [{ key, evidenceKeys: ["repository.state"], reason: "Work cannot proceed." }],
     });
 
@@ -142,6 +153,9 @@ describe("calculateOpportunityScore", () => {
       expect(calculateOpportunityScore(input(50, 50, score + 1)).score).toBeGreaterThanOrEqual(
         calculateOpportunityScore(input(50, 50, score)).score,
       );
+      expect(calculateOpportunityScore(input(50, 50, 50, score + 1)).score).toBeGreaterThanOrEqual(
+        calculateOpportunityScore(input(50, 50, 50, score)).score,
+      );
       expect(calculateOpportunityScore(input(50, score + 1, 50)).score).toBeLessThanOrEqual(
         calculateOpportunityScore(input(50, score, 50)).score,
       );
@@ -157,6 +171,7 @@ describe("calculateOpportunityScore", () => {
             component("activity", score),
             component("competition", 0),
             component("responsiveness", 0),
+            component("actionability", 0),
           ],
         }),
       ).toThrow(RangeError);
@@ -166,9 +181,15 @@ describe("calculateOpportunityScore", () => {
   it("rejects missing and duplicate components", () => {
     expect(() =>
       calculateOpportunityScore({
-        components: [component("activity", 50), component("competition", 50)],
+        components: [
+          component("activity", 50),
+          component("competition", 50),
+          component("responsiveness", 50),
+        ],
       }),
-    ).toThrow("Exactly one activity, competition, and responsiveness component is required.");
+    ).toThrow(
+      "Exactly one activity, competition, responsiveness, and actionability component is required.",
+    );
 
     expect(() =>
       calculateOpportunityScore({
@@ -176,6 +197,7 @@ describe("calculateOpportunityScore", () => {
           component("activity", 50),
           component("activity", 50),
           component("responsiveness", 50),
+          component("actionability", 50),
         ],
       }),
     ).toThrow("Duplicate component: activity.");
@@ -188,6 +210,7 @@ describe("calculateOpportunityScore", () => {
           { ...component("activity", 50), evidenceKeys: [] },
           component("competition", 50),
           component("responsiveness", 50),
+          component("actionability", 50),
         ],
       }),
     ).toThrow("activity evidenceKeys must contain non-empty values.");

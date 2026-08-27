@@ -29,6 +29,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@opportunity-radar/actionability-analyzer':
+        specifier: workspace:*
+        version: link:../../packages/actionability-analyzer
       '@opportunity-radar/activity-analyzer':
         specifier: workspace:*
         version: link:../../packages/activity-analyzer
@@ -69,6 +72,8 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.0
         version: 19.2.5(@types/react@19.2.18)
+
+  packages/actionability-analyzer: {}
 
   packages/activity-analyzer: {}
 
