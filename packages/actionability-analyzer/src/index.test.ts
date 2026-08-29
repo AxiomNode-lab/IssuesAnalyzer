@@ -86,6 +86,46 @@ There are several approaches worth considering. I'd be happy to hear other appro
     expect(result.score).toBeGreaterThan(0);
   });
 
+  it("downgrades a proposal-style issue without acceptance or reproduction evidence", () => {
+    const result = analyzeIssueActionability(
+      input({
+        title: "Introduce multi-tier difficulty labels to improve newcomer onboarding",
+        labels: [],
+        body: `## Motivation
+The current labels could improve newcomer onboarding.
+
+## Proposal
+Introduce multiple difficulty tiers so maintainers can classify issues more precisely.
+
+## Why this is feasible
+The repository already uses labels for triage.`,
+      }),
+    );
+    expect(result.status).toBe("medium");
+    expect(result.score).toBeLessThan(70);
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({ key: "actionability.proposalStyle", value: true }),
+    );
+    expect(result.warnings).toContain(
+      "The issue reads like a proposal or coordination item without concrete acceptance or reproduction evidence.",
+    );
+  });
+
+  it("keeps implementation-ready proposals strong once direction is accepted", () => {
+    const result = analyzeIssueActionability(
+      input({
+        title: "Proposal: strict parser mode",
+        labels: ["enhancement"],
+        body: `We have decided to add strict parser mode. Please implement it in \`parseInput\`.
+Expected behavior: invalid input returns a typed error.`,
+      }),
+    );
+    expect(result.status).toBe("high");
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({ key: "actionability.proposalStyle", value: false }),
+    );
+  });
+
   it("lowers confidence instead of inventing clarity when the body is unavailable", () => {
     const result = analyzeIssueActionability(input({ body: null, labels: [] }));
     expect(result.confidence.level).toBe("low");
