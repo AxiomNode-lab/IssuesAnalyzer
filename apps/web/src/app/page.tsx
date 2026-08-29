@@ -50,9 +50,9 @@ export default function Home() {
               <span>you code.</span>
             </h1>
             <p className="lede">
-              Turn a public GitHub issue into a clear, evidence-backed decision. Understand activity,
-              competition, maintainer responsiveness, actionability, and risk before investing your
-              time.
+              Turn a public GitHub issue into a clear, evidence-backed decision. Understand
+              activity, competition, maintainer responsiveness, actionability, and risk before
+              investing your time.
             </p>
 
             <IssueAnalyzer />
