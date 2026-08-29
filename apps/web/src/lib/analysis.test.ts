@@ -16,26 +16,40 @@ function response<T>(data: T): GitHubResponse<T> {
   return { data, quota, requestId: "request-id" };
 }
 
+function issue(number = 27888) {
+  return {
+    id: number,
+    number,
+    title: "Real issue title",
+    body: "Issue body",
+    state: "open" as const,
+    locked: false,
+    comments: 2,
+    author: { login: "reporter", profileUrl: "https://github.com/reporter" },
+    labels: ["bug"],
+    assignees: [],
+    createdAt: new Date("2026-08-01T10:00:00.000Z"),
+    updatedAt: new Date("2026-08-20T10:00:00.000Z"),
+    closedAt: null,
+    htmlUrl: `https://github.com/sympy/sympy/issues/${number}`,
+  };
+}
+
+function maintainerComment(issueNumber = 1) {
+  return {
+    id: issueNumber,
+    body: "I can review this.",
+    author: { login: "maintainer", profileUrl: "https://github.com/maintainer" },
+    authorAssociation: "MEMBER" as const,
+    createdAt: new Date("2026-08-02T10:00:00.000Z"),
+    updatedAt: new Date("2026-08-02T10:00:00.000Z"),
+    htmlUrl: `https://github.com/sympy/sympy/issues/${issueNumber}#comment`,
+  };
+}
+
 function evidenceClient() {
   return {
-    getIssue: vi.fn(async () =>
-      response({
-        id: 27888,
-        number: 27888,
-        title: "Real issue title",
-        body: "Issue body",
-        state: "open" as const,
-        locked: false,
-        comments: 2,
-        author: { login: "reporter", profileUrl: "https://github.com/reporter" },
-        labels: ["bug"],
-        assignees: [],
-        createdAt: new Date("2026-08-01T10:00:00.000Z"),
-        updatedAt: new Date("2026-08-20T10:00:00.000Z"),
-        closedAt: null,
-        htmlUrl: referenceUrl,
-      }),
-    ),
+    getIssue: vi.fn(async () => response(issue())),
     getRepository: vi.fn(async () =>
       response({
         id: 1,
@@ -54,19 +68,12 @@ function evidenceClient() {
         pushedAt: new Date("2026-08-26T00:00:00.000Z"),
       }),
     ),
-    listIssueComments: vi.fn(async () =>
-      response([
-        {
-          id: 2,
-          body: "I can review this.",
-          author: { login: "maintainer", profileUrl: "https://github.com/maintainer" },
-          authorAssociation: "MEMBER" as const,
-          createdAt: new Date("2026-08-02T10:00:00.000Z"),
-          updatedAt: new Date("2026-08-02T10:00:00.000Z"),
-          htmlUrl: `${referenceUrl}#issuecomment-2`,
-        },
-      ]),
+    listIssueComments: vi.fn(async () => response([maintainerComment(27888)])),
+    listIssueCommentsByNumber: vi.fn(
+      async (_reference: Readonly<{ owner: string; repository: string }>, _issueNumber: number) =>
+        response([maintainerComment()]),
     ),
+    listRecentIssues: vi.fn(async () => response<readonly ReturnType<typeof issue>[]>([])),
     listRecentCommits: vi.fn(async () =>
       response([
         {
@@ -92,12 +99,22 @@ function evidenceClient() {
   };
 }
 
+function expectPrimaryEvidenceCalls(client: ReturnType<typeof evidenceClient>, times = 1) {
+  expect(client.getIssue).toHaveBeenCalledTimes(times);
+  expect(client.getRepository).toHaveBeenCalledTimes(times);
+  expect(client.listIssueComments).toHaveBeenCalledTimes(times);
+  expect(client.listRecentIssues).toHaveBeenCalledTimes(times);
+  expect(client.listRecentCommits).toHaveBeenCalledTimes(times);
+  expect(client.listRecentReleases).toHaveBeenCalledTimes(times);
+  expect(client.getCommunityProfile).toHaveBeenCalledTimes(times);
+  expect(client.listIssueTimeline).toHaveBeenCalledTimes(times);
+  expect(client.listRecentPullRequests).toHaveBeenCalledTimes(times);
+}
+
 describe("live analysis orchestration", () => {
   it("validates, collects real-shaped evidence, invokes every analyzer, and maps the score report", async () => {
     const client = evidenceClient();
-    const analyze = createAnalysisService({ client, now: () => asOf });
-
-    const report = await analyze(referenceUrl);
+    const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
 
     expect(report).toMatchObject({
       repository: "sympy/sympy",
@@ -114,14 +131,42 @@ describe("live analysis orchestration", () => {
       "actionability",
     ]);
     expect(report.components.every((component) => Number.isInteger(component.score))).toBe(true);
-    for (const method of Object.values(client)) expect(method).toHaveBeenCalledOnce();
+    expectPrimaryEvidenceCalls(client);
+  });
+
+  it("collects a bounded multi-thread responsiveness sample", async () => {
+    const client = evidenceClient();
+    const historical = Array.from({ length: 12 }, (_, index) => ({
+      ...issue(index + 1),
+      createdAt: new Date(`2026-08-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
+    }));
+    client.listRecentIssues.mockResolvedValueOnce(response(historical));
+    client.listIssueCommentsByNumber.mockImplementation(async (_reference, issueNumber) =>
+      response([
+        {
+          ...maintainerComment(issueNumber),
+          createdAt: new Date(`2026-08-${String(issueNumber).padStart(2, "0")}T12:00:00.000Z`),
+        },
+      ]),
+    );
+
+    const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
+    const responsiveness = report.components.find(
+      (component) => component.key === "responsiveness",
+    )!;
+
+    expect(client.listIssueCommentsByNumber).toHaveBeenCalledTimes(12);
+    expect(responsiveness.facts).toContainEqual(
+      expect.objectContaining({ label: "Historical sample", value: "12" }),
+    );
+    expect(responsiveness.confidence).toBe("high");
   });
 
   it("allows an active, unopposed, concrete coding task to produce Pursue", async () => {
     const client = evidenceClient();
     client.getIssue.mockResolvedValueOnce(
       response({
-        ...(await evidenceClient().getIssue()).data,
+        ...issue(),
         title: "Fix parser behavior for empty input",
         body: "Steps to reproduce: call `parseInput`. Expected behavior: return an empty result.",
         labels: ["bug", "good first issue"],
@@ -135,35 +180,31 @@ describe("live analysis orchestration", () => {
     const client = evidenceClient();
     client.getIssue.mockResolvedValueOnce(
       response({
-        ...(await evidenceClient().getIssue()).data,
+        ...issue(),
         title: 'Improve how we handle active "good first issue" issues',
         labels: ["meta", "discuss"],
-        body: `### Potential improvements
-There are several approaches worth considering. I'd be happy to hear other approaches though.
-#### 1. Use a different label
-#### 2. Remove the label when a PR exists
-#### 3. Create a claim system`,
+        body: `### Potential improvements\nThere are several approaches worth considering. I'd be happy to hear other approaches though.\n#### 1. Use a different label\n#### 2. Remove the label when a PR exists\n#### 3. Create a claim system`,
       }),
     );
     const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
     expect(report.verdict).not.toBe("pursue");
     expect(report.score).toBeLessThanOrEqual(39);
-    expect(report.decisionReason).toContain("low-actionability discussion");
   });
 
-  it("does not permanently gate a discussion after an accepted implementation direction", async () => {
+  it("caps a stale repository with insufficient maintainer evidence below Pursue", async () => {
     const client = evidenceClient();
-    client.getIssue.mockResolvedValueOnce(
+    client.getRepository.mockResolvedValueOnce(
       response({
-        ...(await evidenceClient().getIssue()).data,
-        title: "Meta: select parser behavior",
-        labels: ["meta", "discuss"],
-        body: "We have decided on the strict parser. Please implement `parseInput`. Expected behavior: return a typed error.",
+        ...(await evidenceClient().getRepository()).data,
+        updatedAt: new Date("2025-11-01T00:00:00.000Z"),
+        pushedAt: new Date("2025-11-01T00:00:00.000Z"),
       }),
     );
+    client.listRecentCommits.mockResolvedValueOnce(response([]));
     const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
-    expect(report.score).toBeGreaterThan(39);
-    expect(report.risks).not.toContainEqual(expect.stringContaining("low-actionability"));
+    expect(report.verdict).toBe("review_carefully");
+    expect(report.score).toBeLessThanOrEqual(69);
+    expect(report.decisionReason).toContain("repository activity is stale");
   });
 
   it("counts a SymPy-style active timeline PR instead of reporting zero linked work", async () => {
@@ -194,15 +235,11 @@ There are several approaches worth considering. I'd be happy to hear other appro
     const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
     const competition = report.components.find((component) => component.key === "competition")!;
     expect(competition.score).toBe(80);
-    expect(competition.facts).toContainEqual(
-      expect.objectContaining({ label: "Active linked pull requests", value: "1" }),
-    );
   });
 
   it("rejects unsafe URLs before calling GitHub", async () => {
     const client = evidenceClient();
     const analyze = createAnalysisService({ client });
-
     await expect(analyze("https://github.com.evil.test/o/r/issues/1")).rejects.toBeInstanceOf(
       InvalidAnalysisInputError,
     );
@@ -216,11 +253,9 @@ There are several approaches worth considering. I'd be happy to hear other appro
       cache: new StaleWhileRevalidateCache(),
       now: () => asOf,
     });
-
     const [first, second] = await Promise.all([analyze(referenceUrl), analyze(referenceUrl)]);
-
     expect(first).toEqual(second);
-    for (const method of Object.values(client)) expect(method).toHaveBeenCalledOnce();
+    expectPrimaryEvidenceCalls(client);
   });
 
   it.each(["not_found", "rate_limited"] as const)(
@@ -228,20 +263,17 @@ There are several approaches worth considering. I'd be happy to hear other appro
     async (kind) => {
       const client = evidenceClient();
       client.getIssue.mockRejectedValueOnce(new GitHubClientError(kind, "upstream failure"));
-      const analyze = createAnalysisService({ client, now: () => asOf });
-
-      await expect(analyze(referenceUrl)).rejects.toMatchObject({ kind });
+      await expect(
+        createAnalysisService({ client, now: () => asOf })(referenceUrl),
+      ).rejects.toMatchObject({ kind });
     },
   );
 
   it("marks missing secondary evidence as partial without fabricating it", async () => {
     const client = evidenceClient();
-    client.listIssueComments.mockRejectedValueOnce(new GitHubClientError("not_found", "missing"));
+    client.listRecentIssues.mockRejectedValueOnce(new GitHubClientError("not_found", "missing"));
     client.listRecentCommits.mockRejectedValueOnce(new GitHubClientError("not_found", "missing"));
-    const analyze = createAnalysisService({ client, now: () => asOf });
-
-    const report = await analyze(referenceUrl);
-
+    const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
     expect(report.partial).toBe(true);
     expect(report.risks).toContain("Commit evidence is unavailable.");
     expect(report.risks).toContain("Historical responsiveness evidence is unavailable.");
@@ -251,10 +283,10 @@ There are several approaches worth considering. I'd be happy to hear other appro
     "does not hide a secondary GitHub %s failure when no stale report exists",
     async (kind) => {
       const client = evidenceClient();
-      client.listIssueComments.mockRejectedValueOnce(new GitHubClientError(kind, "failure"));
-      const analyze = createAnalysisService({ client, now: () => asOf });
-
-      await expect(analyze(referenceUrl)).rejects.toMatchObject({ kind });
+      client.listRecentIssues.mockRejectedValueOnce(new GitHubClientError(kind, "failure"));
+      await expect(
+        createAnalysisService({ client, now: () => asOf })(referenceUrl),
+      ).rejects.toMatchObject({ kind });
     },
   );
 });

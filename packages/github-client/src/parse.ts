@@ -148,6 +148,15 @@ export function parseIssue(value: unknown): GitHubIssue {
   };
 }
 
+export function parseIssuePage(value: unknown): readonly GitHubIssue[] {
+  if (!Array.isArray(value)) {
+    throw new GitHubClientError("invalid_payload", "GitHub returned an invalid issue page.");
+  }
+  return value
+    .filter((entry) => !("pull_request" in object(entry)))
+    .map((entry) => parseIssue(entry));
+}
+
 export function parseIssueComment(value: unknown): GitHubIssueComment {
   const source = object(value);
   const authorAssociation = string(source.author_association, "author association");

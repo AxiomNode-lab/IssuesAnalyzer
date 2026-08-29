@@ -22,7 +22,10 @@ import type {
   GitHubResponse,
 } from "@opportunity-radar/github-client";
 import { analyzeMaintainerResponsiveness } from "@opportunity-radar/responsiveness-analyzer";
-import type { ResponsivenessResult } from "@opportunity-radar/responsiveness-analyzer";
+import type {
+  ResponsivenessResult,
+  ThreadEvidence,
+} from "@opportunity-radar/responsiveness-analyzer";
 import { calculateOpportunityScore } from "@opportunity-radar/scoring-engine";
 import type { HardWarningInput } from "@opportunity-radar/scoring-engine";
 
@@ -45,6 +48,8 @@ type EvidenceClient = Pick<
   GitHubClient,
   | "getIssue"
   | "listIssueComments"
+  | "listIssueCommentsByNumber"
+  | "listRecentIssues"
   | "getRepository"
   | "listRecentCommits"
   | "listRecentReleases"
@@ -60,6 +65,7 @@ type AnalysisServiceOptions = Readonly<{
 }>;
 
 const MAINTAINER_ASSOCIATIONS = new Set(["COLLABORATOR", "MEMBER", "OWNER"]);
+const RESPONSIVENESS_SAMPLE_LIMIT = 15;
 
 function observeQuota(quota: GitHubQuota): void {
   if (quota.remaining !== null) recordMetric("github_quota_remaining", quota.remaining);
@@ -130,7 +136,7 @@ function activityComponent(result: RepositoryActivityResult): ReportComponent {
     key: "activity",
     label: "Repository activity",
     score: result.score,
-    weight: 0.2,
+    weight: 0.25,
     confidence: result.confidence.level,
     reason: `Repository activity is classified as ${result.status.replace("_", " ")}.`,
     facts: result.facts.map((fact): ReportEvidence => ({
@@ -148,7 +154,7 @@ function competitionComponent(result: CompetitionResult): ReportComponent {
     key: "competition",
     label: "Visible competition",
     score: result.score,
-    weight: 0.25,
+    weight: 0.2,
     confidence: result.confidence.level,
     reason: `Visible competition is classified as ${result.status.replace("_", " ")}.`,
     facts: result.facts.map((fact): ReportEvidence => ({
@@ -171,7 +177,7 @@ function responsivenessComponent(result: ResponsivenessResult): ReportComponent 
     key: "responsiveness",
     label: "Maintainer responsiveness",
     score: result.score,
-    weight: 0.15,
+    weight: 0.2,
     confidence: result.confidence.level,
     reason: `Historical maintainer responsiveness is classified as ${result.status}.`,
     facts: result.facts.map((fact): ReportEvidence => ({
@@ -194,7 +200,7 @@ function actionabilityComponent(result: ActionabilityResult): ReportComponent {
     key: "actionability",
     label: "Issue actionability",
     score: result.score,
-    weight: 0.4,
+    weight: 0.35,
     confidence: result.confidence.level,
     reason: `Issue actionability is classified as ${result.status}.`,
     facts: result.facts.map((fact): ReportEvidence => ({
@@ -212,22 +218,58 @@ function actionabilityComponent(result: ActionabilityResult): ReportComponent {
   };
 }
 
-function commentsAsThread(issue: GitHubIssue, comments: readonly GitHubIssueComment[] | null) {
-  if (comments === null) return null;
-  return [
-    {
-      kind: "issue" as const,
-      openedAt: issue.createdAt,
-      sourceUrl: issue.htmlUrl,
-      interactions: comments.map((comment) => ({
-        actorLogin: comment.author.login,
-        actorIsBot: comment.author.login.toLowerCase().endsWith("[bot]"),
-        actorIsMaintainer: MAINTAINER_ASSOCIATIONS.has(comment.authorAssociation),
-        createdAt: comment.createdAt,
-        sourceUrl: comment.htmlUrl,
-      })),
-    },
-  ];
+function issueThread(issue: GitHubIssue, comments: readonly GitHubIssueComment[]): ThreadEvidence {
+  return {
+    kind: "issue",
+    openedAt: issue.createdAt,
+    sourceUrl: issue.htmlUrl,
+    interactions: comments.map((comment) => ({
+      actorLogin: comment.author.login,
+      actorIsBot: comment.author.login.toLowerCase().endsWith("[bot]"),
+      actorIsMaintainer: MAINTAINER_ASSOCIATIONS.has(comment.authorAssociation),
+      createdAt: comment.createdAt,
+      sourceUrl: comment.htmlUrl,
+    })),
+  };
+}
+
+async function historicalResponsivenessThreads(
+  reference: GitHubIssueUrl,
+  currentIssue: GitHubIssue,
+  client: EvidenceClient,
+): Promise<readonly ThreadEvidence[] | null> {
+  const recentIssues = await optionalEvidence(() =>
+    client.listRecentIssues(reference, { limit: 20 }),
+  );
+  if (recentIssues === null) return null;
+
+  const candidates = recentIssues
+    .filter((candidate) => candidate.number !== currentIssue.number)
+    .slice(0, RESPONSIVENESS_SAMPLE_LIMIT);
+  const threads: ThreadEvidence[] = [];
+
+  for (const candidate of candidates) {
+    const comments = await optionalEvidence(() =>
+      client.listIssueCommentsByNumber(reference, candidate.number, { perPage: 100, maxPages: 1 }),
+    );
+    if (comments !== null) threads.push(issueThread(candidate, comments));
+  }
+  return threads;
+}
+
+function latestActivityFreshnessDays(activity: RepositoryActivityResult): number | null {
+  const fact = activity.facts.find((item) => item.key === "repository.latestActivityAt");
+  return fact?.freshnessDays ?? null;
+}
+
+function stalenessBand(
+  days: number | null,
+): "unknown" | "recent" | "moderately_quiet" | "stale" | "very_stale" {
+  if (days === null) return "unknown";
+  if (days <= 30) return "recent";
+  if (days <= 90) return "moderately_quiet";
+  if (days <= 180) return "stale";
+  return "very_stale";
 }
 
 function nextAction(decision: "pursue" | "review_carefully" | "skip"): string {
@@ -240,6 +282,8 @@ function nextAction(decision: "pursue" | "review_carefully" | "skip"): string {
 function hardWarnings(
   issue: GitHubIssue,
   repository: { archived: boolean; disabled: boolean },
+  activity: RepositoryActivityResult,
+  responsiveness: ResponsivenessResult,
   actionability: ActionabilityResult,
 ): HardWarningInput[] {
   const warnings: HardWarningInput[] = [];
@@ -268,6 +312,19 @@ function hardWarnings(
       reason:
         "The issue is currently a high-confidence low-actionability discussion or planning item, not a contribution-ready implementation task.",
     });
+
+  const activityFreshness = latestActivityFreshnessDays(activity);
+  if (
+    stalenessBand(activityFreshness) === "very_stale" &&
+    responsiveness.status === "insufficient"
+  ) {
+    warnings.push({
+      key: "stale_opportunity_uncertain_maintainers",
+      evidenceKeys: ["repository.latestActivityAt", "responsiveness.sampleSize"],
+      reason:
+        "The issue appears actionable, but repository activity is stale and maintainer-response evidence is insufficient for a strong Pursue recommendation.",
+    });
+  }
   return warnings;
 }
 
@@ -285,14 +342,16 @@ async function buildReport(
   const issue = issueResponse.data;
   const repository = repositoryResponse.data;
 
-  const [comments, commits, releases, readiness, timeline, pullRequests] = await Promise.all([
-    optionalEvidence(() => client.listIssueComments(reference)),
-    optionalEvidence(() => client.listRecentCommits(reference)),
-    optionalEvidence(() => client.listRecentReleases(reference)),
-    optionalEvidence(() => client.getCommunityProfile(reference)),
-    optionalEvidence(() => client.listIssueTimeline(reference)),
-    optionalEvidence(() => client.listRecentPullRequests(reference)),
-  ]);
+  const [comments, commits, releases, readiness, timeline, pullRequests, historicalThreads] =
+    await Promise.all([
+      optionalEvidence(() => client.listIssueComments(reference)),
+      optionalEvidence(() => client.listRecentCommits(reference)),
+      optionalEvidence(() => client.listRecentReleases(reference)),
+      optionalEvidence(() => client.getCommunityProfile(reference)),
+      optionalEvidence(() => client.listIssueTimeline(reference)),
+      optionalEvidence(() => client.listRecentPullRequests(reference)),
+      historicalResponsivenessThreads(reference, issue, client),
+    ]);
 
   const activity = analyzeRepositoryActivity({
     asOf,
@@ -358,7 +417,7 @@ async function buildReport(
   const responsiveness = analyzeMaintainerResponsiveness({
     asOf,
     repositoryUrl: repository.htmlUrl,
-    threads: commentsAsThread(issue, comments),
+    threads: historicalThreads,
   });
   const actionability = analyzeIssueActionability({
     asOf,
@@ -404,7 +463,7 @@ async function buildReport(
         warnings: actionability.warnings,
       },
     ],
-    hardWarnings: hardWarnings(issue, repository, actionability),
+    hardWarnings: hardWarnings(issue, repository, activity, responsiveness, actionability),
   });
   const components = [
     activityComponent(activity),
