@@ -80,7 +80,7 @@ const MAX_TIMELINE_EVENTS = 300;
 const MAX_PULL_REQUESTS = 100;
 
 const CLAIM_PATTERNS = [
-  /\b(?:i(?:'|’)d|i would)\s+(?:like|love|glad|be happy)\s+to\s+(?:work on|take|tackle|handle|pick up|contribute to)\s+(?:this|the)\s+(?:issue|task|one)?\b/i,
+  /\b(?:i(?:'|’)d|i would)\s+(?:like|love|glad|be happy)\s+to\s+(?:work on|take|tackle|handle|pick up|contribute to)\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
   /\b(?:i(?:'|’)ll|i will|i can|i could|i(?:'|’)m going to|i am going to)\s+(?:work on|take|tackle|handle|pick up)\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
   /\b(?:can|could|may)\s+i\s+(?:work on|take|tackle|handle|pick up)\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
   /\b(?:please\s+)?assign\s+(?:this\s+(?:issue|task)\s+to\s+me|me(?:\s+to\s+(?:this|the)(?:\s+(?:issue|task))?)?)\b/i,
