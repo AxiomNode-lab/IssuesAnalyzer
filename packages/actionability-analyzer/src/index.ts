@@ -104,7 +104,7 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
   if (unresolvedDirection) score -= 15;
   if (multipleAlternatives) score -= 20;
   if (trackingIssue) score -= 20;
-  if (proposalStyle && !acceptanceCriteria && !reproduction) score -= 20;
+  if (proposalStyle && !acceptanceCriteria && !reproduction) score -= 10;
   score = Math.min(100, Math.max(0, score));
 
   const facts: ActionabilityFact[] = [
