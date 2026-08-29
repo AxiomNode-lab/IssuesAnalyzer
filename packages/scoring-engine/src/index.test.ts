@@ -82,6 +82,53 @@ describe("calculateOpportunityScore", () => {
     expect(result.decision).toBe("review_carefully");
   });
 
+  it("caps an active linked implementation below Pursue", () => {
+    const result = calculateOpportunityScore({
+      ...input(84, 80, 25, 85),
+      hardWarnings: [
+        {
+          key: "active_competing_implementation",
+          evidenceKeys: ["competition.activePullRequestCount"],
+          reason: "An active linked pull request already implements this issue.",
+        },
+      ],
+    });
+    expect(result.uncappedScore).toBe(60);
+    expect(result.score).toBe(49);
+    expect(result.decision).toBe("review_carefully");
+  });
+
+  it("uses a stricter cap when the issue is assigned and has active implementation work", () => {
+    const result = calculateOpportunityScore({
+      ...input(84, 80, 25, 85),
+      hardWarnings: [
+        {
+          key: "assigned_active_competing_implementation",
+          evidenceKeys: ["issue.assigneeCount", "competition.activePullRequestCount"],
+          reason: "The issue is assigned and active implementation work is already visible.",
+        },
+      ],
+    });
+    expect(result.score).toBe(39);
+    expect(result.decision).toBe("skip");
+  });
+
+  it("prevents incomplete competition evidence from producing Pursue", () => {
+    const result = calculateOpportunityScore({
+      ...input(80, 0, 80, 90),
+      hardWarnings: [
+        {
+          key: "competition_evidence_incomplete",
+          evidenceKeys: ["competition.activePullRequestCount"],
+          reason: "Competition evidence is incomplete, so zero visible work is not conclusive.",
+        },
+      ],
+    });
+    expect(result.uncappedScore).toBeGreaterThanOrEqual(70);
+    expect(result.score).toBe(69);
+    expect(result.decision).toBe("review_carefully");
+  });
+
   it("preserves component warnings and calculates weighted confidence", () => {
     const source = input();
     const components = source.components.map((item, index) => ({
@@ -100,6 +147,9 @@ describe("calculateOpportunityScore", () => {
     ["issue_closed", 20],
     ["issue_low_actionability", 39],
     ["stale_opportunity_uncertain_maintainers", 69],
+    ["active_competing_implementation", 49],
+    ["assigned_active_competing_implementation", 39],
+    ["competition_evidence_incomplete", 69],
   ] as const)("applies the %s hard-warning cap", (key, cap) => {
     const result = calculateOpportunityScore({
       ...input(100, 0, 100, 100),
