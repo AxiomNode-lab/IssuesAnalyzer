@@ -52,6 +52,8 @@ const ACCEPTED_DIRECTION =
   /\b(?:we (?:have )?(?:decided|agreed)|accepted approach|consensus is|approved approach|please implement|ready for implementation|implementation direction is)\b/i;
 const TRACKING_ISSUE =
   /\b(?:tracking issue|umbrella issue|meta issue|collect(?:ing)? sub-issues|many issues bundled together)\b/i;
+const PROPOSAL_STYLE =
+  /\b(?:proposal|propose|introduce|motivation|why this is feasible|would like to|could improve|should we|consider adding|consider introducing)\b/i;
 const NUMBERED_ALTERNATIVE = /^\s*\d+[.)]\s+/gm;
 const HEADING_ALTERNATIVE = /^\s*#{1,6}\s+(?:option\s+)?\d+[.:)]?\s+/gim;
 const ALTERNATIVE_CONTEXT =
@@ -81,6 +83,7 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
   const acceptedDirection = ACCEPTED_DIRECTION.test(text);
   const unresolvedDirection = !acceptedDirection && UNRESOLVED_DIRECTION.test(text);
   const trackingIssue = TRACKING_ISSUE.test(text);
+  const proposalStyle = !acceptedDirection && PROPOSAL_STYLE.test(text);
   const headingAlternativeCount = [...body.matchAll(HEADING_ALTERNATIVE)].length;
   const numberedAlternativeCount = ALTERNATIVE_CONTEXT.test(body)
     ? [...body.matchAll(NUMBERED_ALTERNATIVE)].length
@@ -101,6 +104,7 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
   if (unresolvedDirection) score -= 15;
   if (multipleAlternatives) score -= 20;
   if (trackingIssue) score -= 20;
+  if (proposalStyle && !acceptanceCriteria && !reproduction) score -= 10;
   score = Math.min(100, Math.max(0, score));
 
   const facts: ActionabilityFact[] = [
@@ -153,6 +157,13 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
       observedAt: input.asOf,
       freshnessDays: 0,
     },
+    {
+      key: "actionability.proposalStyle",
+      value: proposalStyle,
+      sourceUrl: input.issue.canonicalUrl,
+      observedAt: input.asOf,
+      freshnessDays: 0,
+    },
   ];
   const basisFactKeys = facts.map((fact) => fact.key);
   const status: ActionabilityStatus = score >= 70 ? "high" : score >= 40 ? "medium" : "low";
@@ -167,12 +178,17 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
     unresolvedDirection,
     multipleAlternatives,
     trackingIssue,
+    proposalStyle,
   ].filter(Boolean).length;
   const warnings: string[] = [];
   if (input.issue.body === null || body.trim().length === 0)
     warnings.push("Issue description is unavailable, so actionability is uncertain.");
   if (signalCount === 0)
     warnings.push("No strong contribution-readiness or discussion signals were detected.");
+  if (proposalStyle && !acceptanceCriteria && !reproduction)
+    warnings.push(
+      "The issue reads like a proposal or coordination item without concrete acceptance or reproduction evidence.",
+    );
 
   return {
     version: "actionability-v1",

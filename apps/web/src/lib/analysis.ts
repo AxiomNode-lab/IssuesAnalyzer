@@ -250,7 +250,10 @@ async function historicalResponsivenessThreads(
 
   for (const candidate of candidates) {
     const comments = await optionalEvidence(() =>
-      client.listIssueCommentsByNumber(reference, candidate.number, { perPage: 100, maxPages: 1 }),
+      client.listIssueCommentsByNumber(reference, candidate.number, {
+        perPage: 100,
+        maxPages: 1,
+      }),
     );
     if (comments !== null) threads.push(issueThread(candidate, comments));
   }
@@ -279,10 +282,26 @@ function nextAction(decision: "pursue" | "review_carefully" | "skip"): string {
   return "Review the risks and confirm the issue is still available before investing effort.";
 }
 
+function factNumber(result: CompetitionResult, key: string): number {
+  const value = result.facts.find((fact) => fact.key === key)?.value;
+  return typeof value === "number" ? value : 0;
+}
+
+function competitionEvidenceIncomplete(result: CompetitionResult): boolean {
+  return result.warnings.some(
+    (warning) =>
+      warning.includes("Pull request evidence is unavailable") ||
+      warning.includes("pull request evidence reached its collection bound") ||
+      warning.includes("Timeline evidence is unavailable") ||
+      warning.includes("Timeline evidence reached its collection bound"),
+  );
+}
+
 function hardWarnings(
   issue: GitHubIssue,
   repository: { archived: boolean; disabled: boolean },
   activity: RepositoryActivityResult,
+  competition: CompetitionResult,
   responsiveness: ResponsivenessResult,
   actionability: ActionabilityResult,
 ): HardWarningInput[] {
@@ -305,6 +324,31 @@ function hardWarnings(
       evidenceKeys: ["issue.state"],
       reason: "The issue is closed.",
     });
+
+  const assigneeCount = factNumber(competition, "issue.assigneeCount");
+  const activePullRequestCount = factNumber(competition, "competition.activePullRequestCount");
+  if (assigneeCount > 0 && activePullRequestCount > 0)
+    warnings.push({
+      key: "assigned_active_competing_implementation",
+      evidenceKeys: ["issue.assigneeCount", "competition.activePullRequestCount"],
+      reason:
+        "The issue is assigned and an active linked pull request already exists, so starting competing work is unlikely to be worthwhile.",
+    });
+  else if (activePullRequestCount > 0)
+    warnings.push({
+      key: "active_competing_implementation",
+      evidenceKeys: ["competition.activePullRequestCount"],
+      reason:
+        "An active linked pull request already implements this issue; review that work before investing in a competing implementation.",
+    });
+  else if (competitionEvidenceIncomplete(competition))
+    warnings.push({
+      key: "competition_evidence_incomplete",
+      evidenceKeys: ["competition.activePullRequestCount", "competition.linkedPullRequestCount"],
+      reason:
+        "Competition evidence is incomplete, so zero visible linked work is not strong enough for a Pursue recommendation.",
+    });
+
   if (actionability.status === "low" && actionability.confidence.level === "high")
     warnings.push({
       key: "issue_low_actionability",
@@ -463,7 +507,14 @@ async function buildReport(
         warnings: actionability.warnings,
       },
     ],
-    hardWarnings: hardWarnings(issue, repository, activity, responsiveness, actionability),
+    hardWarnings: hardWarnings(
+      issue,
+      repository,
+      activity,
+      competition,
+      responsiveness,
+      actionability,
+    ),
   });
   const components = [
     activityComponent(activity),
