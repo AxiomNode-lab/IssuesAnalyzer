@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import "./globals.css";
 import "./report.css";
+import "./report-layout-fix.css";
 
 export const metadata: Metadata = {
   title: "Issue Analyzer",
