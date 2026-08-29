@@ -78,8 +78,39 @@ const DAY = 86_400_000;
 const MAX_COMMENTS = 500;
 const MAX_TIMELINE_EVENTS = 300;
 const MAX_PULL_REQUESTS = 100;
-const CLAIM_PATTERN =
-  /\b(?:i(?:'|’)d like to work on|i(?:'|’)ll work on|i am working on|i(?:'|’)m working on|working on this|let me work on|claim(?:ing)? this|can i work on)\b/i;
+
+const CLAIM_PATTERNS = [
+  /\b(?:i(?:'|’)d|i would)\s+(?:like|love|glad|be happy)\s+to\s+(?:work on|take|tackle|handle|pick up|contribute to)\s+(?:this|the)\s+(?:issue|task|one)?\b/i,
+  /\b(?:i(?:'|’)ll|i will|i can|i could|i(?:'|’)m going to|i am going to)\s+(?:work on|take|tackle|handle|pick up)\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
+  /\b(?:can|could|may)\s+i\s+(?:work on|take|tackle|handle|pick up)\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
+  /\b(?:please\s+)?assign\s+(?:this\s+(?:issue|task)\s+to\s+me|me(?:\s+to\s+(?:this|the)(?:\s+(?:issue|task))?)?)\b/i,
+  /\b(?:could|can|would)\s+you\s+(?:please\s+)?assign\s+(?:this\s+(?:issue|task)\s+to\s+)?me\b/i,
+  /\b(?:i(?:'|’)m|i am|currently|already)\s+(?:actively\s+)?working on\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
+  /\b(?:started|starting|began|beginning)\s+(?:to\s+work|working)\s+on\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
+  /\b(?:working on|taking|tackling|handling|picking up)\s+(?:this|the)\s+(?:issue|task|one)\b/i,
+  /\blet\s+me\s+(?:work on|take|tackle|handle|pick up)\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
+  /\bclaim(?:ing)?\s+(?:this|the)\s+(?:issue|task|one)\b/i,
+  /\b(?:i(?:'|’)d|i would|i(?:'|’)ll|i will|i can)\s+(?:love|like|be happy|be glad)?\s*(?:to\s+)?take\s+(?:this|the)\s+one\s+on\b/i,
+  /\b(?:has|have|had|i(?:'|’)ve|i have)\s+applied\s+to\s+work\s+on\s+(?:this|the)\s+(?:issue|task)\b/i,
+  /\bapplied\s+for\s+(?:this|the)\s+(?:issue|task)\b/i,
+  /\bapplication\s+to\s+work\s+on\s+(?:this|the)\s+(?:issue|task)\b/i,
+  /\b(?:ready|available)\s+to\s+(?:start|get started|work)\s+on\s+(?:this|the)\s+(?:issue|task)\b/i,
+  /\b(?:i(?:'|’)m|i am)\s+(?:ready|available)\s+to\s+get\s+started\s+(?:on\s+(?:this|the)\s+(?:issue|task))?\b/i,
+  /\b(?:i(?:'|’)ll|i will)\s+(?:get started|start working)\s+(?:on\s+)?(?:this|the)\s+(?:issue|task)\b/i,
+  /\b(?:i(?:'|’)d|i would)\s+like\s+to\s+contribute\s+(?:to|on)\s+(?:this|the)\s+(?:issue|task)\b/i,
+];
+
+const NON_CLAIM_PATTERNS = [
+  /\b(?:i(?:'|’)m not|i am not|not)\s+working on\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
+  /\b(?:i can(?:'|’)t|i cannot|i won(?:'|’)t|i will not)\s+(?:work on|take|tackle|handle)\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
+  /\b(?:no longer|stopped|stop|dropping|drop|giving up|gave up)\s+(?:working on|work on|this|the)\b/i,
+  /\b(?:please\s+)?unassign\s+me\b/i,
+];
+
+function hasClaimLanguage(body: string): boolean {
+  if (NON_CLAIM_PATTERNS.some((pattern) => pattern.test(body))) return false;
+  return CLAIM_PATTERNS.some((pattern) => pattern.test(body));
+}
 
 function validDate(value: Date, name: string): void {
   if (Number.isNaN(value.getTime())) throw new TypeError(`Invalid ${name} date.`);
@@ -170,7 +201,7 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
       comment.body !== null &&
       comment.author.login.toLowerCase() !== input.issue.authorLogin.toLowerCase() &&
       !isBot(comment.author.login) &&
-      CLAIM_PATTERN.test(comment.body),
+      hasClaimLanguage(comment.body),
   );
   const explicitlyReferenced = pullRequests.filter((pullRequest) =>
     referencesIssue(
