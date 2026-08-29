@@ -3,8 +3,10 @@ import { IssueAnalyzer } from "../components/issue-analyzer";
 function LogoMark() {
   return (
     <span className="app-logo" aria-hidden="true">
-      <span className="app-logo-dot" />
-      <span className="app-logo-ring" />
+      <svg viewBox="0 0 64 64" focusable="false">
+        <circle cx="27" cy="27" r="16" />
+        <path d="M39.5 39.5 53 53" />
+      </svg>
     </span>
   );
 }
@@ -15,6 +17,7 @@ export default function Home() {
       <a className="skip-link" href="#main">
         Skip to content
       </a>
+
       <header className="site-header">
         <a className="brand" href="/" aria-label="Issue Analyzer home">
           <LogoMark />
@@ -29,7 +32,7 @@ export default function Home() {
           <a href="#about">About</a>
           <a href="#how-it-works">How it works</a>
           <a className="signin-link" href="/api/auth/github/start">
-            Sign in
+            Sign in with GitHub
           </a>
         </nav>
       </header>
@@ -38,52 +41,88 @@ export default function Home() {
         <section className="hero" aria-labelledby="hero-title">
           <div className="hero-glow" aria-hidden="true" />
           <div className="hero-content">
-            <h1 id="hero-title">Know before you code.</h1>
+            <div className="hero-eyebrow">
+              <span className="hero-eyebrow-dot" aria-hidden="true" />
+              Public GitHub issue intelligence
+            </div>
+            <h1 id="hero-title">
+              Know before
+              <span>you code.</span>
+            </h1>
             <p className="lede">
-              Paste a public GitHub Issue URL and get instant insight into activity, competition,
-              responsiveness, actionability, and risk.
+              Turn a public GitHub issue into a clear, evidence-backed decision. Understand activity,
+              competition, maintainer responsiveness, actionability, and risk before investing your
+              time.
             </p>
+
             <IssueAnalyzer />
-            <p className="privacy-note">
-              Only public GitHub data is analyzed. No code is accessed.
-            </p>
-            <a className="scroll-cue" href="#results" aria-label="Scroll to analysis results">
-              ↓
-            </a>
+
+            <div className="hero-meta" aria-label="Product promises">
+              <span>Public data only</span>
+              <span>Explainable scoring</span>
+              <span>No repository write access</span>
+            </div>
           </div>
         </section>
 
         <section className="results-shell" id="results" aria-label="Analysis results">
-          <div className="results-intro">
-            <span>Analysis report</span>
-            <h2>Results overview</h2>
+          <div className="results-heading-row">
+            <div className="results-intro">
+              <span>Analysis report</span>
+              <h2>Evidence, not guesswork.</h2>
+            </div>
+            <p>
+              Your report separates facts from inferences, highlights freshness, and explains the
+              recommendation behind the score.
+            </p>
           </div>
-          <p className="results-placeholder">
-            Your live analysis will appear here after you submit an issue URL above.
-          </p>
+
+          <div className="results-placeholder">
+            <div className="placeholder-icon" aria-hidden="true">
+              <LogoMark />
+            </div>
+            <div>
+              <strong>Ready when you are.</strong>
+              <span>Paste a public issue URL above to generate the first analysis.</span>
+            </div>
+          </div>
         </section>
 
-        <section className="info-strip" id="how-it-works" aria-labelledby="how-title">
-          <div>
-            <span>01</span>
-            <h2 id="how-title">Paste an issue</h2>
-            <p>Use any public GitHub issue URL.</p>
+        <section className="info-section" id="how-it-works" aria-labelledby="how-title">
+          <div className="section-copy">
+            <span className="section-kicker">How it works</span>
+            <h2 id="how-title">A faster way to decide where your time is worth spending.</h2>
+            <p>
+              The analyzer turns scattered GitHub signals into one structured pre-flight report so
+              you can move forward with more context.
+            </p>
           </div>
-          <div>
-            <span>02</span>
-            <h2>We inspect the evidence</h2>
-            <p>Activity, competition, maintainer response, actionability, and freshness.</p>
-          </div>
-          <div id="about">
-            <span>03</span>
-            <h2>Make a better decision</h2>
-            <p>Get an explainable pursue, review carefully, or skip recommendation.</p>
+
+          <div className="info-strip">
+            <div>
+              <span>01</span>
+              <h3>Paste an issue</h3>
+              <p>Start with any supported public GitHub issue URL.</p>
+            </div>
+            <div>
+              <span>02</span>
+              <h3>Inspect the evidence</h3>
+              <p>We evaluate activity, competition, response patterns, and freshness.</p>
+            </div>
+            <div id="about">
+              <span>03</span>
+              <h3>Make the call</h3>
+              <p>Get an explainable pursue, review carefully, or skip recommendation.</p>
+            </div>
           </div>
         </section>
       </main>
 
       <footer>
-        <span>Issue Analyzer</span>
+        <span className="footer-brand">
+          <LogoMark />
+          <strong>Issue Analyzer</strong>
+        </span>
         <span>Decision support, not a guarantee.</span>
       </footer>
     </>
