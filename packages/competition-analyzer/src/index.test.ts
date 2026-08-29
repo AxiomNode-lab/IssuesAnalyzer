@@ -93,6 +93,78 @@ describe("analyzeCompetition", () => {
     );
   });
 
+  it.each([
+    "I'd like to work on this issue.",
+    "I would love to work on this task.",
+    "I'll work on this issue.",
+    "I will tackle this task.",
+    "I can handle this issue.",
+    "Could I work on this issue?",
+    "May I take this task?",
+    "Please assign me.",
+    "Please assign this issue to me.",
+    "Could you please assign me?",
+    "I'm working on this issue now.",
+    "I am currently working on this task.",
+    "Already working on this issue.",
+    "Started working on this issue today.",
+    "Working on this issue.",
+    "Let me tackle this issue.",
+    "Claiming this issue.",
+    "I'd love to take this one on.",
+    "@dev has applied to work on this issue as part of the program.",
+    "I have applied to work on this issue.",
+    "Applied for this issue.",
+    "Application to work on this issue submitted.",
+    "Ready to start on this issue.",
+    "I am ready to get started on this issue.",
+    "I'll start working on this issue.",
+    "I would like to contribute to this issue.",
+  ])("recognizes contributor intent phrasing: %s", (body) => {
+    const result = analyzeCompetition(input({ comments: [comment(body)] }));
+    expect(result.status).toBe("possible");
+    expect(result.score).toBe(50);
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({ key: "competition.claimCommentCount", value: 1 }),
+    );
+  });
+
+  it("counts multiple independent claim comments", () => {
+    const result = analyzeCompetition(
+      input({
+        comments: [
+          { ...comment("I'd love to take this one on.", "alice"), sourceUrl: `${issueUrl}#a` },
+          {
+            ...comment("@bob has applied to work on this issue as part of the Wave Program.", "bob"),
+            sourceUrl: `${issueUrl}#b`,
+          },
+        ],
+      }),
+    );
+    expect(result.status).toBe("possible");
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({ key: "competition.claimCommentCount", value: 2 }),
+    );
+  });
+
+  it.each([
+    "I am not working on this issue.",
+    "I can't work on this issue.",
+    "I cannot take this task.",
+    "I won't work on this issue.",
+    "No longer working on this issue.",
+    "Stopped working on this issue.",
+    "Please unassign me.",
+    "This looks interesting, but I have no time to take it.",
+  ])("does not treat withdrawal or refusal as a claim: %s", (body) => {
+    const result = analyzeCompetition(input({ comments: [comment(body)] }));
+    expect(result.status).toBe("none_visible");
+    expect(result.score).toBe(0);
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({ key: "competition.claimCommentCount", value: 0 }),
+    );
+  });
+
   it("ignores bot and issue-author claim comments", () => {
     const result = analyzeCompetition(
       input({
