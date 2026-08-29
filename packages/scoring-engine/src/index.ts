@@ -8,7 +8,10 @@ export type HardWarningKey =
   | "repository_disabled"
   | "issue_closed"
   | "issue_low_actionability"
-  | "stale_opportunity_uncertain_maintainers";
+  | "stale_opportunity_uncertain_maintainers"
+  | "active_competing_implementation"
+  | "assigned_active_competing_implementation"
+  | "competition_evidence_incomplete";
 
 export type ScoreComponentInput = Readonly<{
   key: ComponentKey;
@@ -74,6 +77,9 @@ const HARD_WARNING_CAPS: Readonly<Record<HardWarningKey, number>> = {
   issue_closed: 20,
   issue_low_actionability: 39,
   stale_opportunity_uncertain_maintainers: 69,
+  active_competing_implementation: 49,
+  assigned_active_competing_implementation: 39,
+  competition_evidence_incomplete: 69,
 };
 
 function assertScore(value: number, name: string): void {
@@ -101,14 +107,20 @@ function decisionReason(
     hardWarnings: readonly AppliedHardWarning[];
   }>,
 ): string {
-  const lowActionability = result.hardWarnings.find(
-    (warning) => warning.key === "issue_low_actionability",
-  );
-  if (lowActionability) return lowActionability.reason;
-  const staleGuard = result.hardWarnings.find(
-    (warning) => warning.key === "stale_opportunity_uncertain_maintainers",
-  );
-  if (staleGuard) return staleGuard.reason;
+  const priority = [
+    "repository_archived",
+    "repository_disabled",
+    "issue_closed",
+    "assigned_active_competing_implementation",
+    "active_competing_implementation",
+    "competition_evidence_incomplete",
+    "issue_low_actionability",
+    "stale_opportunity_uncertain_maintainers",
+  ] as const;
+  for (const key of priority) {
+    const warning = result.hardWarnings.find((item) => item.key === key);
+    if (warning) return warning.reason;
+  }
 
   const actionability = result.components.find((component) => component.key === "actionability")!;
   const competition = result.components.find((component) => component.key === "competition")!;
