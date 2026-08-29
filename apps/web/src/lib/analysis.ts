@@ -238,7 +238,9 @@ async function historicalResponsivenessThreads(
   currentIssue: GitHubIssue,
   client: EvidenceClient,
 ): Promise<readonly ThreadEvidence[] | null> {
-  const recentIssues = await optionalEvidence(() => client.listRecentIssues(reference, { limit: 20 }));
+  const recentIssues = await optionalEvidence(() =>
+    client.listRecentIssues(reference, { limit: 20 }),
+  );
   if (recentIssues === null) return null;
 
   const candidates = recentIssues
@@ -248,7 +250,10 @@ async function historicalResponsivenessThreads(
 
   for (const candidate of candidates) {
     const comments = await optionalEvidence(() =>
-      client.listIssueCommentsByNumber(reference, candidate.number, { perPage: 100, maxPages: 1 }),
+      client.listIssueCommentsByNumber(reference, candidate.number, {
+        perPage: 100,
+        maxPages: 1,
+      }),
     );
     if (comments !== null) threads.push(issueThread(candidate, comments));
   }
@@ -396,7 +401,8 @@ async function buildReport(
     asOf,
     repository,
     commits:
-      commits?.map((commit) => ({ occurredAt: commit.committedAt, sourceUrl: commit.htmlUrl })) ?? null,
+      commits?.map((commit) => ({ occurredAt: commit.committedAt, sourceUrl: commit.htmlUrl })) ??
+      null,
     releases:
       releases?.map((release) => ({
         occurredAt: release.publishedAt,
