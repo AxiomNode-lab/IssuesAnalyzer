@@ -1,0 +1,35 @@
+.report-portal {
+  position: relative;
+  left: 50%;
+  width: min(1240px, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+  margin: 2.5rem 0 0;
+  transform: translateX(-50%);
+  text-align: left;
+}
+
+.report-portal .report,
+.report-portal .report-header,
+.report-portal .report-summary,
+.report-portal .report-component,
+.report-portal .risk-panel {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.report-portal h2,
+.report-portal h3,
+.report-portal p,
+.report-portal dd,
+.report-portal a,
+.report-portal li {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 800px) {
+  .report-portal {
+    width: calc(100vw - 1.25rem);
+    max-width: calc(100vw - 1.25rem);
+    margin-top: 2rem;
+  }
+}
