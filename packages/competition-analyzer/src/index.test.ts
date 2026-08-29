@@ -70,7 +70,11 @@ describe("analyzeCompetition", () => {
       input({
         pullRequests: [
           pullRequest("Closes #42"),
-          { ...pullRequest("Unrelated change"), number: 8, sourceUrl: "https://example.test/pr/8" },
+          {
+            ...pullRequest("Unrelated change"),
+            number: 8,
+            sourceUrl: "https://example.test/pr/8",
+          },
         ],
       }),
     );
@@ -133,9 +137,15 @@ describe("analyzeCompetition", () => {
     const result = analyzeCompetition(
       input({
         comments: [
-          { ...comment("I'd love to take this one on.", "alice"), sourceUrl: `${issueUrl}#a` },
           {
-            ...comment("@bob has applied to work on this issue as part of the Wave Program.", "bob"),
+            ...comment("I'd love to take this one on.", "alice"),
+            sourceUrl: `${issueUrl}#a`,
+          },
+          {
+            ...comment(
+              "@bob has applied to work on this issue as part of the Wave Program.",
+              "bob",
+            ),
             sourceUrl: `${issueUrl}#b`,
           },
         ],
