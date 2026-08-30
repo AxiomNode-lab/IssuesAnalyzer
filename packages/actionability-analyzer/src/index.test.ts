@@ -74,7 +74,7 @@ There are several approaches worth considering. I'd be happy to hear other appro
     );
   });
 
-  it("records umbrella scope as a negative fact without making it an absolute rule", () => {
+  it("treats umbrella scope as a low-actionability tracker", () => {
     const result = analyzeIssueActionability(
       input({
         body: "This is really many issues bundled together. Implement one missing handler.",
@@ -83,7 +83,43 @@ There are several approaches worth considering. I'd be happy to hear other appro
     expect(result.facts).toContainEqual(
       expect.objectContaining({ key: "actionability.trackingIssue", value: true }),
     );
-    expect(result.score).toBeGreaterThan(0);
+    expect(result.score).toBeLessThanOrEqual(20);
+    expect(result.status).toBe("low");
+  });
+
+  it("detects a Renovate dependency dashboard even when optimistic labels are present", () => {
+    const result = analyzeIssueActionability(
+      input({
+        title: "Dependency Dashboard",
+        labels: ["good first issue", "automated", "bot", "renovate", "dependencies"],
+        body: `This issue lists Renovate updates and detected dependencies.
+- [ ] chore(deps): update node
+- [ ] Check this box to trigger a request for Renovate to run again`,
+      }),
+    );
+    expect(result.status).toBe("low");
+    expect(result.score).toBeLessThanOrEqual(20);
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({ key: "actionability.automatedIssue", value: true }),
+    );
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({ key: "actionability.automatedOrTracking", value: true }),
+    );
+  });
+
+  it("detects roadmap trackers as non-task issues", () => {
+    const result = analyzeIssueActionability(
+      input({
+        title: "Public Roadmap",
+        labels: [],
+        body: "This is a tracking issue for navigating the living public roadmap.",
+      }),
+    );
+    expect(result.status).toBe("low");
+    expect(result.score).toBeLessThanOrEqual(20);
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({ key: "actionability.trackingIssue", value: true }),
+    );
   });
 
   it("downgrades a proposal-style issue without acceptance or reproduction evidence", () => {
