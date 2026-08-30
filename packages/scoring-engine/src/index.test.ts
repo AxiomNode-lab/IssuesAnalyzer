@@ -27,7 +27,7 @@ function component(
 
 function input(
   activity = 80,
-  competition = 80,
+  competitionRisk = 20,
   responsiveness = 80,
   actionability = 80,
 ): OpportunityScoreInput {
@@ -35,7 +35,7 @@ function input(
     components: [
       component("responsiveness", responsiveness),
       component("activity", activity),
-      component("competition", competition),
+      component("competition", competitionRisk),
       component("actionability", actionability),
     ],
   };
@@ -55,22 +55,22 @@ describe("calculateOpportunityScore", () => {
       "actionability",
     ]);
     expect(result.components[1]).toMatchObject({
-      rawScore: 80,
+      rawScore: 20,
       normalizedScore: 80,
       weight: 0.3,
       weightedPoints: 24,
     });
   });
 
-  it("uses the same positive direction for all component scores", () => {
-    expect(calculateOpportunityScore(input(50, 100, 50, 50)).score).toBeGreaterThan(
-      calculateOpportunityScore(input(50, 0, 50, 50)).score,
+  it("converts competition risk to contributor availability before weighting", () => {
+    expect(calculateOpportunityScore(input(50, 0, 50, 50)).score).toBeGreaterThan(
+      calculateOpportunityScore(input(50, 100, 50, 50)).score,
     );
   });
 
   it("expands strong and weak tails while keeping the midpoint stable", () => {
-    const strong = calculateOpportunityScore(input(80, 80, 80, 80));
-    const weak = calculateOpportunityScore(input(20, 20, 20, 20));
+    const strong = calculateOpportunityScore(input(80, 20, 80, 80));
+    const weak = calculateOpportunityScore(input(20, 80, 20, 20));
     const middle = calculateOpportunityScore(input(50, 50, 50, 50));
 
     expect(strong.baseScore).toBe(80);
@@ -80,13 +80,23 @@ describe("calculateOpportunityScore", () => {
     expect(middle.score).toBe(50);
   });
 
-  it("does not turn incomplete evidence into a score cap", () => {
-    const components = input(84, 100, 25, 100).components.map((item) =>
+  it("does not turn incomplete competition evidence into a score cap", () => {
+    const source = input(84, 0, 25, 100);
+    const components = source.components.map((item) =>
       item.key === "competition"
         ? { ...item, confidence: { level: "medium" as const, value: 55 }, warnings: ["bounded"] }
         : item,
     );
-    const result = calculateOpportunityScore({ components });
+    const result = calculateOpportunityScore({
+      components,
+      hardWarnings: [
+        {
+          key: "competition_evidence_incomplete",
+          evidenceKeys: ["competition.activePullRequestCount"],
+          reason: "Competition evidence is incomplete.",
+        },
+      ],
+    });
     expect(result.score).toBeGreaterThanOrEqual(70);
     expect(result.confidence.value).toBeLessThan(80);
     expect(result.warnings).toContain("bounded");
@@ -94,7 +104,7 @@ describe("calculateOpportunityScore", () => {
 
   it("caps an active linked implementation below Pursue", () => {
     const result = calculateOpportunityScore({
-      ...input(84, 20, 25, 85),
+      ...input(84, 80, 25, 85),
       hardWarnings: [
         {
           key: "active_competing_implementation",
@@ -109,7 +119,7 @@ describe("calculateOpportunityScore", () => {
 
   it("uses a stricter cap when the issue is assigned and has active implementation work", () => {
     const result = calculateOpportunityScore({
-      ...input(84, 20, 25, 85),
+      ...input(84, 80, 25, 85),
       hardWarnings: [
         {
           key: "assigned_active_competing_implementation",
@@ -124,7 +134,7 @@ describe("calculateOpportunityScore", () => {
 
   it("caps automated or tracking issues regardless of optimistic labels", () => {
     const result = calculateOpportunityScore({
-      ...input(100, 100, 100, 100),
+      ...input(100, 0, 100, 100),
       hardWarnings: [
         {
           key: "automated_or_tracking_issue",
@@ -154,22 +164,23 @@ describe("calculateOpportunityScore", () => {
     ["repository_archived", 0],
     ["repository_disabled", 0],
     ["issue_closed", 20],
-    ["issue_low_actionability", 39],
+    ["issue_low_actionability", 25],
     ["automated_or_tracking_issue", 20],
     ["stale_opportunity_uncertain_maintainers", 69],
     ["active_competing_implementation", 49],
     ["assigned_active_competing_implementation", 39],
+    ["competition_evidence_incomplete", 100],
   ] as const)("applies the %s hard-warning cap", (key, cap) => {
     const result = calculateOpportunityScore({
-      ...input(100, 100, 100, 100),
+      ...input(100, 0, 100, 100),
       hardWarnings: [{ key, evidenceKeys: ["repository.state"], reason: "Guardrail." }],
     });
-    expect(result.score).toBe(cap);
+    expect(result.score).toBe(cap === 100 ? 100 : cap);
   });
 
   it("uses the strictest cap when several hard warnings apply", () => {
     const result = calculateOpportunityScore({
-      ...input(100, 100, 100),
+      ...input(100, 0, 100),
       hardWarnings: [
         { key: "issue_closed", evidenceKeys: ["issue.state"], reason: "Issue is closed." },
         {
@@ -184,7 +195,7 @@ describe("calculateOpportunityScore", () => {
 
   it("keeps scores bounded for all integer component values", () => {
     for (let score = 0; score <= 100; score += 1) {
-      const result = calculateOpportunityScore(input(score, score, score, score));
+      const result = calculateOpportunityScore(input(score, 100 - score, score, score));
       expect(result.score).toBeGreaterThanOrEqual(0);
       expect(result.score).toBeLessThanOrEqual(100);
     }
@@ -201,7 +212,7 @@ describe("calculateOpportunityScore", () => {
       expect(calculateOpportunityScore(input(50, 50, 50, score + 1)).score).toBeGreaterThanOrEqual(
         calculateOpportunityScore(input(50, 50, 50, score)).score,
       );
-      expect(calculateOpportunityScore(input(50, score + 1, 50)).score).toBeGreaterThanOrEqual(
+      expect(calculateOpportunityScore(input(50, score + 1, 50)).score).toBeLessThanOrEqual(
         calculateOpportunityScore(input(50, score, 50)).score,
       );
     }
