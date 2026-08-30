@@ -1,7 +1,7 @@
 "use client";
 
 import { parseGitHubIssueUrl } from "@opportunity-radar/domain";
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import type { FormEvent } from "react";
 
 import { AnalysisReport } from "./analysis-report";
@@ -16,12 +16,6 @@ export function IssueAnalyzer() {
   const [status, setStatus] = useState<Status>("empty");
   const [error, setError] = useState("");
   const [report, setReport] = useState<AnalysisReportModel | null>(null);
-
-  useEffect(() => {
-    if (status === "success" && report !== null) {
-      document.getElementById("results")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [status, report]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
