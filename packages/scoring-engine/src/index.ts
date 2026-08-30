@@ -11,7 +11,8 @@ export type HardWarningKey =
   | "automated_or_tracking_issue"
   | "stale_opportunity_uncertain_maintainers"
   | "active_competing_implementation"
-  | "assigned_active_competing_implementation";
+  | "assigned_active_competing_implementation"
+  | "competition_evidence_incomplete";
 
 export type ScoreComponentInput = Readonly<{
   key: ComponentKey;
@@ -68,7 +69,6 @@ const ORDER: readonly ComponentKey[] = [
   "actionability",
 ];
 
-// Every component uses the same direction in v3: 100 means better for a contributor.
 const WEIGHTS: Readonly<Record<ComponentKey, number>> = {
   activity: 0.2,
   competition: 0.3,
@@ -80,11 +80,12 @@ const HARD_WARNING_CAPS: Readonly<Record<HardWarningKey, number>> = {
   repository_archived: 0,
   repository_disabled: 0,
   issue_closed: 20,
-  issue_low_actionability: 39,
+  issue_low_actionability: 25,
   automated_or_tracking_issue: 20,
   stale_opportunity_uncertain_maintainers: 69,
   active_competing_implementation: 49,
   assigned_active_competing_implementation: 39,
+  competition_evidence_incomplete: 100,
 };
 
 function assertScore(value: number, name: string): void {
@@ -108,8 +109,6 @@ function decision(score: number): Decision {
 }
 
 function calibrate(baseScore: number): number {
-  // Expand the tails while keeping the middle stable. This corrects the v2 tendency
-  // to compress very strong and very weak opportunities toward 50-70.
   const expanded = 50 + (baseScore - 50) * 1.25;
   return Math.round(Math.min(100, Math.max(0, expanded)));
 }
@@ -142,7 +141,7 @@ function decisionReason(
   const activity = result.components.find((component) => component.key === "activity")!;
   const responsiveness = result.components.find((component) => component.key === "responsiveness")!;
 
-  if (competition.rawScore <= 35) {
+  if (competition.rawScore >= 65) {
     return "Visible competition materially reduces the value of starting a new implementation now.";
   }
   if (result.score >= 85) {
@@ -188,7 +187,9 @@ export function calculateOpportunityScore(input: OpportunityScoreInput): Opportu
   const components = ORDER.map((key): ScoreComponent => {
     const component = byKey.get(key);
     if (component === undefined) throw new TypeError(`Missing component: ${key}.`);
-    const normalizedScore = component.score;
+    // Competition analyzer is intentionally a risk score (100 = more competition).
+    // Convert it to contributor opportunity direction before weighting.
+    const normalizedScore = key === "competition" ? 100 - component.score : component.score;
     const weight = WEIGHTS[key];
     return {
       key,
