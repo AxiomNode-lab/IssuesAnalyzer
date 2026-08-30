@@ -121,7 +121,7 @@ function newestBounded<T>(
 }
 const isBot = (login: string) => login.toLowerCase().endsWith("[bot]");
 const referencesIssue = (text: string, number: number, url: string) =>
-  text.includes(url) || new RegExp(`(^|\\s)#${number}(?=\\s|$|[.,;:!?)}\\]])`).test(text);
+  text.includes(url) || new RegExp(`(^|\\s)#${number}(?=\\s|$|[.,;:!?\\)\\}\\]])`).test(text);
 function confidence(sources: number, incomplete: number) {
   const value = Math.max(0, Math.round((sources / 4) * 100) - incomplete * 30);
   return {
@@ -287,52 +287,28 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
       ],
       caution: "No active visible signal does not guarantee nobody is working privately.",
     });
-  const completeness = input.completeness ?? { timeline: true, pullRequests: true },
-    warnings: string[] = [];
+  const completeTimeline = input.completeness?.timeline ?? input.timeline !== null,
+    completePRs = input.completeness?.pullRequests ?? input.pullRequests !== null,
+    incomplete = Number(!completeTimeline) + Number(!completePRs),
+    sourceCount = Number(input.comments !== null) + Number(input.timeline !== null) + Number(input.pullRequests !== null) + 1,
+    conf = confidence(sourceCount, incomplete);
+  const latestClaimAge = latestClaim ? daysBetween(input.asOf, latestClaim.createdAt) : 0;
+  let score = 0;
+  if (active.length) score = 100;
+  else if (input.issue.assignees.length) score = 75;
+  else if (claimComments.length) score = claimRisk(claimComments.length, latestClaimAge);
+  else if (merged.length) score = 35;
+  else if (closed.length) score = 20;
+  const status: CompetitionStatus = score >= 60 ? "visible" : score >= 20 ? "possible" : "none_visible";
+  const warnings: string[] = [];
+  if (!completeTimeline) warnings.push("Timeline evidence is incomplete or unavailable.");
+  if (!completePRs) warnings.push("Repository pull request evidence reached its collection bound.");
   if (input.comments === null) warnings.push("Comment evidence is unavailable.");
-  if (input.timeline === null) warnings.push("Timeline evidence is unavailable.");
-  if (input.pullRequests === null) warnings.push("Pull request evidence is unavailable.");
-  if (!completeness.timeline)
-    warnings.push(
-      "Timeline evidence reached its collection bound; additional linked work may exist.",
-    );
-  if (!completeness.pullRequests)
-    warnings.push("Repository pull request evidence reached its collection bound.");
-  if ((input.comments?.length ?? 0) > MAX_COMMENTS)
-    warnings.push("Comment evidence was bounded to 500 records.");
-  if ((input.timeline?.length ?? 0) > MAX_TIMELINE_EVENTS)
-    warnings.push("Timeline evidence was bounded to 300 records.");
-  if ((input.pullRequests?.length ?? 0) > MAX_PULL_REQUESTS)
-    warnings.push("Pull request evidence was bounded to 100 records.");
-  const evidenceConfidence = confidence(
-    1 +
-      Number(input.comments !== null) +
-      Number(input.timeline !== null) +
-      Number(input.pullRequests !== null),
-    Number(input.timeline !== null && !completeness.timeline) +
-      Number(input.pullRequests !== null && !completeness.pullRequests),
-  );
-  const latestClaimDays = latestClaim ? daysBetween(input.asOf, latestClaim.createdAt) : 0;
-  const score = Math.max(
-    active.length >= 3 ? 100 : active.length === 2 ? 90 : active.length === 1 ? 80 : 0,
-    input.issue.assignees.length ? 75 : 0,
-    claimRisk(claimComments.length, latestClaimDays),
-    merged.length ? 20 : 0,
-    closed.length ? 10 : 0,
-  );
-  const status: CompetitionStatus =
-    active.length || input.issue.assignees.length
-      ? "visible"
-      : claimComments.length || merged.length + closed.length
-        ? "possible"
-        : input.comments === null && input.timeline === null && input.pullRequests === null
-          ? "uncertain"
-          : "none_visible";
   return {
     version: "competition-v2",
     status,
     score,
-    confidence: evidenceConfidence,
+    confidence: conf,
     facts,
     inferences,
     warnings,
