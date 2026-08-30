@@ -290,7 +290,11 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
   const completeTimeline = input.completeness?.timeline ?? input.timeline !== null,
     completePRs = input.completeness?.pullRequests ?? input.pullRequests !== null,
     incomplete = Number(!completeTimeline) + Number(!completePRs),
-    sourceCount = Number(input.comments !== null) + Number(input.timeline !== null) + Number(input.pullRequests !== null) + 1,
+    sourceCount =
+      Number(input.comments !== null) +
+      Number(input.timeline !== null) +
+      Number(input.pullRequests !== null) +
+      1,
     conf = confidence(sourceCount, incomplete);
   const latestClaimAge = latestClaim ? daysBetween(input.asOf, latestClaim.createdAt) : 0;
   let score = 0;
@@ -299,7 +303,8 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
   else if (claimComments.length) score = claimRisk(claimComments.length, latestClaimAge);
   else if (merged.length) score = 35;
   else if (closed.length) score = 20;
-  const status: CompetitionStatus = score >= 60 ? "visible" : score >= 20 ? "possible" : "none_visible";
+  const status: CompetitionStatus =
+    score >= 60 ? "visible" : score >= 20 ? "possible" : "none_visible";
   const warnings: string[] = [];
   if (!completeTimeline) warnings.push("Timeline evidence is incomplete or unavailable.");
   if (!completePRs) warnings.push("Repository pull request evidence reached its collection bound.");
