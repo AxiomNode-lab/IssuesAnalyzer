@@ -61,6 +61,12 @@ const NUMBERED_ALTERNATIVE = /^\s*\d+[.)]\s+/gm;
 const HEADING_ALTERNATIVE = /^\s*#{1,6}\s+(?:option\s+)?\d+[.:)]?\s+/gim;
 const ALTERNATIVE_CONTEXT =
   /\b(?:possible approaches?|approaches worth considering|options? include)\b/i;
+const MODERATE_SCOPE =
+  /\b(?:multiple files?|multi-file|several (?:files?|components?|modules?)|across (?:the )?(?:codebase|stack)|frontend and backend|client and server|end[- ]to[- ]end)\b/i;
+const HIGH_RISK_SCOPE =
+  /\b(?:database migration|schema migration|data migration|backfill|security-sensitive|authentication|authorization|architecture change|architectural|breaking change|external research|research required|blocked by|depends on|dependency on|unresolved design|cross-cutting)\b/i;
+const LARGE_IMPLEMENTATION =
+  /\b(?:large implementation|multi-step implementation|phased rollout|multiple services|several packages|many components)\b/i;
 
 function confidence(signalCount: number, bodyAvailable: boolean) {
   const value = !bodyAvailable ? 25 : signalCount >= 3 ? 85 : signalCount >= 1 ? 65 : 35;
@@ -88,8 +94,17 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
   const unresolvedDirection = !acceptedDirection && UNRESOLVED_DIRECTION.test(text);
   const trackingIssue = TRACKING_ISSUE.test(text);
   const automatedIssue = automatedLabels.length > 0 || AUTOMATED_ISSUE.test(text);
-  const automatedOrTracking = automatedIssue || trackingIssue;
+  const independentlyActionable =
+    concreteRequest && specificTarget && (acceptanceCriteria || reproduction || acceptedDirection);
+  const automatedOrTracking = automatedIssue || (trackingIssue && !independentlyActionable);
   const proposalStyle = !acceptedDirection && PROPOSAL_STYLE.test(text);
+  const moderateScope = MODERATE_SCOPE.test(text);
+  const highRiskScope = HIGH_RISK_SCOPE.test(text);
+  const largeImplementation = LARGE_IMPLEMENTATION.test(text);
+  const complexityPenalty = Math.min(
+    25,
+    (moderateScope ? 8 : 0) + (highRiskScope ? 12 : 0) + (largeImplementation ? 10 : 0),
+  );
   const headingAlternativeCount = [...body.matchAll(HEADING_ALTERNATIVE)].length;
   const numberedAlternativeCount = ALTERNATIVE_CONTEXT.test(body)
     ? [...body.matchAll(NUMBERED_ALTERNATIVE)].length
@@ -112,6 +127,8 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
   if (trackingIssue) score -= 35;
   if (automatedIssue) score -= 60;
   if (proposalStyle && !acceptanceCriteria && !reproduction) score -= 10;
+  score = Math.min(100, Math.max(0, score));
+  score -= complexityPenalty;
   score = Math.min(100, Math.max(0, score));
   if (automatedOrTracking) score = Math.min(score, 20);
 
@@ -180,6 +197,25 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
       freshnessDays: 0,
     },
     {
+      key: "actionability.complexityPenalty",
+      value: complexityPenalty,
+      sourceUrl: input.issue.canonicalUrl,
+      observedAt: input.asOf,
+      freshnessDays: 0,
+    },
+    {
+      key: "actionability.scopeRisk",
+      value:
+        complexityPenalty === 0
+          ? "self-contained"
+          : highRiskScope || largeImplementation
+            ? "complex or dependency-sensitive"
+            : "moderate multi-component scope",
+      sourceUrl: input.issue.canonicalUrl,
+      observedAt: input.asOf,
+      freshnessDays: 0,
+    },
+    {
       key: "actionability.proposalStyle",
       value: proposalStyle,
       sourceUrl: input.issue.canonicalUrl,
@@ -204,6 +240,9 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
     trackingIssue,
     automatedIssue,
     proposalStyle,
+    moderateScope,
+    highRiskScope,
+    largeImplementation,
   ].filter(Boolean).length;
   const warnings: string[] = [];
 
@@ -216,6 +255,15 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
   if (proposalStyle && !acceptanceCriteria && !reproduction) {
     warnings.push(
       "The issue reads like a proposal or coordination item without concrete acceptance or reproduction evidence.",
+    );
+  }
+  if (complexityPenalty > 0) {
+    warnings.push(
+      `Implementation scope reduces actionability by ${complexityPenalty} points because the issue describes ${
+        highRiskScope || largeImplementation
+          ? "complex, cross-cutting, migration, research, or dependency-sensitive work"
+          : "work spanning multiple components"
+      }.`,
     );
   }
   if (automatedIssue) {

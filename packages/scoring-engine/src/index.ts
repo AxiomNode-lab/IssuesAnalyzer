@@ -69,7 +69,7 @@ const ORDER: readonly ComponentKey[] = [
   "actionability",
 ];
 
-const WEIGHTS: Readonly<Record<ComponentKey, number>> = {
+export const SCORE_WEIGHTS: Readonly<Record<ComponentKey, number>> = {
   activity: 0.2,
   competition: 0.3,
   responsiveness: 0.15,
@@ -81,7 +81,7 @@ const HARD_WARNING_CAPS: Readonly<Record<HardWarningKey, number>> = {
   repository_disabled: 0,
   issue_closed: 20,
   issue_low_actionability: 25,
-  automated_or_tracking_issue: 20,
+  automated_or_tracking_issue: 15,
   stale_opportunity_uncertain_maintainers: 69,
   active_competing_implementation: 49,
   assigned_active_competing_implementation: 39,
@@ -108,9 +108,29 @@ function decision(score: number): Decision {
   return score >= 70 ? "pursue" : score >= 40 ? "review_carefully" : "skip";
 }
 
-function calibrate(baseScore: number): number {
-  const expanded = 50 + (baseScore - 50) * 1.25;
-  return Math.round(Math.min(100, Math.max(0, expanded)));
+const CALIBRATION_ANCHORS = [
+  [0, 0],
+  [20, 10],
+  [40, 38],
+  [50, 50],
+  [60, 61],
+  [70, 73],
+  [80, 86],
+  [85, 90],
+  [90, 93],
+  [95, 96],
+  [100, 100],
+] as const;
+
+export function calibrateOpportunityScore(baseScore: number): number {
+  if (!Number.isFinite(baseScore)) throw new RangeError("base score must be finite.");
+  const bounded = Math.min(100, Math.max(0, baseScore));
+  const upperIndex = CALIBRATION_ANCHORS.findIndex(([input]) => input >= bounded);
+  if (upperIndex <= 0) return CALIBRATION_ANCHORS[0][1];
+  const [upperInput, upperOutput] = CALIBRATION_ANCHORS[upperIndex]!;
+  const [lowerInput, lowerOutput] = CALIBRATION_ANCHORS[upperIndex - 1]!;
+  const progress = (bounded - lowerInput) / (upperInput - lowerInput);
+  return Math.round(lowerOutput + progress * (upperOutput - lowerOutput));
 }
 
 function decisionReason(
@@ -190,7 +210,7 @@ export function calculateOpportunityScore(input: OpportunityScoreInput): Opportu
     // Competition analyzer is intentionally a risk score (100 = more competition).
     // Convert it to contributor opportunity direction before weighting.
     const normalizedScore = key === "competition" ? 100 - component.score : component.score;
-    const weight = WEIGHTS[key];
+    const weight = SCORE_WEIGHTS[key];
     return {
       key,
       rawScore: component.score,
@@ -210,7 +230,7 @@ export function calculateOpportunityScore(input: OpportunityScoreInput): Opportu
       0,
     ),
   );
-  const calibratedScore = calibrate(baseScore);
+  const calibratedScore = calibrateOpportunityScore(baseScore);
   const overallConfidence = Math.round(
     components.reduce(
       (total, component) => total + component.confidence.value * component.weight,

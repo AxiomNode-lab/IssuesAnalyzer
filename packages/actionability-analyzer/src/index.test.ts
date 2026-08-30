@@ -162,6 +162,46 @@ Expected behavior: invalid input returns a typed error.`,
     );
   });
 
+  it("distinguishes equally clear tasks by implementation scope and risk", () => {
+    const small = analyzeIssueActionability(
+      input({
+        labels: ["enhancement"],
+        body: "Please implement `renderEmptyState`. Acceptance criteria: show the supplied message.",
+      }),
+    );
+    const complex = analyzeIssueActionability(
+      input({
+        labels: ["enhancement"],
+        body: `Please implement \`backfillAccounts\`. Acceptance criteria: update every account.
+This requires a database migration and backfill across multiple services and is blocked by the schema rollout.`,
+      }),
+    );
+
+    expect(small.score).toBeGreaterThan(complex.score);
+    expect(small.facts).toContainEqual(
+      expect.objectContaining({ key: "actionability.complexityPenalty", value: 0 }),
+    );
+    expect(complex.facts).toContainEqual(
+      expect.objectContaining({ key: "actionability.complexityPenalty", value: 22 }),
+    );
+    expect(complex.warnings.join(" ")).toContain("Implementation scope reduces actionability");
+  });
+
+  it("does not cap a tracker that contains an independently actionable contribution", () => {
+    const result = analyzeIssueActionability(
+      input({
+        title: "Tracking issue: add parser empty-state handling",
+        body: "Please implement `parseInput`. Acceptance criteria: empty input returns an empty result.",
+      }),
+    );
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({ key: "actionability.trackingIssue", value: true }),
+    );
+    expect(result.facts).toContainEqual(
+      expect.objectContaining({ key: "actionability.automatedOrTracking", value: false }),
+    );
+  });
+
   it("lowers confidence instead of inventing clarity when the body is unavailable", () => {
     const result = analyzeIssueActionability(input({ body: null, labels: [] }));
     expect(result.confidence.level).toBe("low");

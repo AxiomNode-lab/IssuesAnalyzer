@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   SCORE_VERSION,
+  SCORE_WEIGHTS,
+  calibrateOpportunityScore,
   calculateOpportunityScore,
   type OpportunityScoreInput,
   type ScoreComponentInput,
@@ -41,12 +43,41 @@ function input(
   };
 }
 
+describe("calibrateOpportunityScore", () => {
+  it.each([
+    [0, 0],
+    [20, 10],
+    [40, 38],
+    [50, 50],
+    [60, 61],
+    [70, 73],
+    [80, 86],
+    [85, 90],
+    [90, 93],
+    [95, 96],
+    [100, 100],
+  ])("maps base %i to %i", (base, expected) => {
+    expect(calibrateOpportunityScore(base)).toBe(expected);
+  });
+
+  it("is monotonic and bounded across the complete integer input range", () => {
+    let previous = calibrateOpportunityScore(0);
+    for (let base = 1; base <= 100; base += 1) {
+      const current = calibrateOpportunityScore(base);
+      expect(current).toBeGreaterThanOrEqual(previous);
+      expect(current).toBeGreaterThanOrEqual(0);
+      expect(current).toBeLessThanOrEqual(100);
+      previous = current;
+    }
+  });
+});
+
 describe("calculateOpportunityScore", () => {
   it("produces a versioned, explainable score in canonical component order", () => {
     const result = calculateOpportunityScore(input());
     expect(result.version).toBe(SCORE_VERSION);
     expect(result.baseScore).toBe(80);
-    expect(result.score).toBe(88);
+    expect(result.score).toBe(86);
     expect(result.decision).toBe("pursue");
     expect(result.components.map((item) => item.key)).toEqual([
       "activity",
@@ -60,6 +91,9 @@ describe("calculateOpportunityScore", () => {
       weight: 0.3,
       weightedPoints: 24,
     });
+    expect(Object.fromEntries(result.components.map(({ key, weight }) => [key, weight]))).toEqual(
+      SCORE_WEIGHTS,
+    );
   });
 
   it("converts competition risk to contributor availability before weighting", () => {
@@ -68,15 +102,15 @@ describe("calculateOpportunityScore", () => {
     );
   });
 
-  it("expands strong and weak tails while keeping the midpoint stable", () => {
+  it("calibrates strong and weak tails while keeping the midpoint stable", () => {
     const strong = calculateOpportunityScore(input(80, 20, 80, 80));
     const weak = calculateOpportunityScore(input(20, 80, 20, 20));
     const middle = calculateOpportunityScore(input(50, 50, 50, 50));
 
     expect(strong.baseScore).toBe(80);
-    expect(strong.score).toBe(88);
+    expect(strong.score).toBe(86);
     expect(weak.baseScore).toBe(20);
-    expect(weak.score).toBe(13);
+    expect(weak.score).toBe(10);
     expect(middle.score).toBe(50);
   });
 
@@ -143,8 +177,15 @@ describe("calculateOpportunityScore", () => {
         },
       ],
     });
-    expect(result.score).toBe(20);
+    expect(result.score).toBe(15);
+    expect(result.calibratedScore).toBe(100);
     expect(result.decision).toBe("skip");
+  });
+
+  it("does not cap a normal actionable issue", () => {
+    const result = calculateOpportunityScore(input(90, 0, 90, 95));
+    expect(result.score).toBeGreaterThan(20);
+    expect(result.hardWarningsApplied).toEqual([]);
   });
 
   it("preserves component warnings and calculates weighted confidence separately from score", () => {
@@ -157,7 +198,7 @@ describe("calculateOpportunityScore", () => {
     const result = calculateOpportunityScore({ components });
     expect(result.confidence.level).toBe("low");
     expect(result.warnings).toHaveLength(4);
-    expect(result.score).toBe(88);
+    expect(result.score).toBe(86);
   });
 
   it.each([
@@ -165,7 +206,7 @@ describe("calculateOpportunityScore", () => {
     ["repository_disabled", 0],
     ["issue_closed", 20],
     ["issue_low_actionability", 25],
-    ["automated_or_tracking_issue", 20],
+    ["automated_or_tracking_issue", 15],
     ["stale_opportunity_uncertain_maintainers", 69],
     ["active_competing_implementation", 49],
     ["assigned_active_competing_implementation", 39],
