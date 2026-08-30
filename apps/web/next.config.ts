@@ -14,7 +14,7 @@ const headers = [
       "img-src 'self' https://avatars.githubusercontent.com data:",
       "font-src 'self' data:",
       "style-src 'self' 'unsafe-inline'",
-      "script-src 'self' 'unsafe-inline'",
+      `script-src 'self' 'unsafe-inline'${production ? "" : " 'unsafe-eval'"}`,
       "connect-src 'self' https://github.com https://api.github.com",
     ].join("; "),
   },
