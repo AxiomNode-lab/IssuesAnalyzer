@@ -26,7 +26,7 @@ import type {
   ResponsivenessResult,
   ThreadEvidence,
 } from "@opportunity-radar/responsiveness-analyzer";
-import { calculateOpportunityScore } from "@opportunity-radar/scoring-engine";
+import { calculateOpportunityScore, SCORE_WEIGHTS } from "@opportunity-radar/scoring-engine";
 import type { HardWarningInput } from "@opportunity-radar/scoring-engine";
 
 import type {
@@ -115,6 +115,10 @@ function factLabel(key: string): string {
     "actionability.acceptanceCriteria": "Acceptance criteria detected",
     "actionability.concreteRequest": "Concrete implementation request",
     "actionability.trackingIssue": "Tracking or umbrella scope",
+    "actionability.automatedIssue": "Automated issue",
+    "actionability.automatedOrTracking": "Non-standalone automated or tracking issue",
+    "actionability.complexityPenalty": "Implementation complexity adjustment",
+    "actionability.scopeRisk": "Implementation scope",
     "responsiveness.sampleSize": "Historical sample",
     "responsiveness.respondedThreads": "Threads with maintainer response",
     "responsiveness.responseCoveragePercent": "Response coverage percent",
@@ -136,7 +140,7 @@ function activityComponent(result: RepositoryActivityResult): ReportComponent {
     key: "activity",
     label: "Repository activity",
     score: result.score,
-    weight: 0.25,
+    weight: SCORE_WEIGHTS.activity,
     confidence: result.confidence.level,
     reason: `Repository activity is classified as ${result.status.replace("_", " ")}.`,
     facts: result.facts.map((fact): ReportEvidence => ({
@@ -154,7 +158,7 @@ function competitionComponent(result: CompetitionResult): ReportComponent {
     key: "competition",
     label: "Visible competition",
     score: result.score,
-    weight: 0.2,
+    weight: SCORE_WEIGHTS.competition,
     confidence: result.confidence.level,
     reason: `Visible competition is classified as ${result.status.replace("_", " ")}.`,
     facts: result.facts.map((fact): ReportEvidence => ({
@@ -177,7 +181,7 @@ function responsivenessComponent(result: ResponsivenessResult): ReportComponent 
     key: "responsiveness",
     label: "Maintainer responsiveness",
     score: result.score,
-    weight: 0.2,
+    weight: SCORE_WEIGHTS.responsiveness,
     confidence: result.confidence.level,
     reason: `Historical maintainer responsiveness is classified as ${result.status}.`,
     facts: result.facts.map((fact): ReportEvidence => ({
@@ -200,7 +204,7 @@ function actionabilityComponent(result: ActionabilityResult): ReportComponent {
     key: "actionability",
     label: "Issue actionability",
     score: result.score,
-    weight: 0.35,
+    weight: SCORE_WEIGHTS.actionability,
     confidence: result.confidence.level,
     reason: `Issue actionability is classified as ${result.status}.`,
     facts: result.facts.map((fact): ReportEvidence => ({
@@ -346,10 +350,24 @@ function hardWarnings(
       key: "competition_evidence_incomplete",
       evidenceKeys: ["competition.activePullRequestCount", "competition.linkedPullRequestCount"],
       reason:
-        "Competition evidence is incomplete, so zero visible linked work is not strong enough for a Pursue recommendation.",
+        "Competition evidence is incomplete; treat the availability assessment with medium confidence.",
     });
 
-  if (actionability.status === "low" && actionability.confidence.level === "high")
+  const automatedOrTracking = actionability.facts.some(
+    (fact) => fact.key === "actionability.automatedOrTracking" && fact.value === true,
+  );
+  if (automatedOrTracking)
+    warnings.push({
+      key: "automated_or_tracking_issue",
+      evidenceKeys: ["actionability.automatedOrTracking"],
+      reason: "Automated dependency/tracking issue rather than a standalone contribution task.",
+    });
+
+  if (
+    !automatedOrTracking &&
+    actionability.status === "low" &&
+    actionability.confidence.level === "high"
+  )
     warnings.push({
       key: "issue_low_actionability",
       evidenceKeys: actionability.facts.map((fact) => fact.key),

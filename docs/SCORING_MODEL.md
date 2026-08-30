@@ -17,11 +17,7 @@ The weighting intentionally gives more influence to whether work is still availa
 
 ## Tail calibration
 
-V2 tended to compress both excellent and poor opportunities toward the 50–70 range. V3 first computes a normal weighted base score and then expands distance from the midpoint:
-
-`calibrated = 50 + (base - 50) * 1.25`
-
-The result is clamped to 0–100. A base score of 80 becomes 88, a base score of 20 becomes 13, and a base score of 50 stays 50. This preserves sensible middle-range results while giving strong and weak evidence more separation.
+V2 tended to compress both excellent and poor opportunities toward the middle. V3 computes a normal weighted base score and applies monotonic piecewise-linear calibration. Anchors preserve the useful middle range while slopes diminish near the high end: base scores of 20, 50, 80, 90, and 95 calibrate to 10, 50, 86, 93, and 96 respectively. The result is rounded and bounded to 0–100.
 
 ## Confidence is separate from score
 
@@ -40,6 +36,7 @@ Evidence-backed caps still override an optimistic calibrated result:
 - archived or disabled repository: 0
 - closed issue: 20
 - high-confidence low-actionability issue: 25
+- automated or non-standalone tracking issue: 15
 - active linked implementation: 49
 - assigned issue plus active linked implementation: 39
 - very stale repository plus insufficient maintainer evidence: 69
@@ -64,7 +61,7 @@ The application samples up to 15 recent issue threads, excluding the issue curre
 
 ## Issue actionability
 
-Actionability uses only observable issue title, body, and labels. Positive signals include concrete requested behavior, reproduction details, expected outcomes/checklists, specific code targets, contribution-ready labels, and accepted implementation direction. Negative signals include discussion/meta/question labels, multiple unresolved proposals, open-ended direction requests, tracking/umbrella language, roadmaps, and automated dependency-management output.
+Actionability uses only observable issue title, body, and labels. Positive signals include concrete requested behavior, reproduction details, expected outcomes/checklists, specific code targets, contribution-ready labels, and accepted implementation direction. Negative signals include discussion/meta/question labels, multiple unresolved proposals, open-ended direction requests, tracking/umbrella language, roadmaps, automated dependency-management output, and evidence of multi-component, migration, architecture, dependency, security-sensitive, or research-heavy scope. Complexity is a bounded adjustment: it distinguishes equally clear tasks without automatically rejecting database or security work.
 
 Labels are not absolute rules. Generated or automated issue structure is explicitly prevented from masquerading as a high-quality contribution task.
 

@@ -1,4 +1,5 @@
 import { GitHubClientError, StaleWhileRevalidateCache } from "@opportunity-radar/github-client";
+import { SCORE_WEIGHTS } from "@opportunity-radar/scoring-engine";
 import type {
   GitHubIssueEvent,
   GitHubQuota,
@@ -131,6 +132,9 @@ describe("live analysis orchestration", () => {
       "actionability",
     ]);
     expect(report.components.every((component) => Number.isInteger(component.score))).toBe(true);
+    expect(Object.fromEntries(report.components.map(({ key, weight }) => [key, weight]))).toEqual(
+      SCORE_WEIGHTS,
+    );
     expectPrimaryEvidenceCalls(client);
   });
 
@@ -174,6 +178,35 @@ describe("live analysis orchestration", () => {
     );
     const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
     expect(report.verdict).toBe("pursue");
+  });
+
+  it("applies the automated dashboard cap after calibration with an explicit reason", async () => {
+    const client = evidenceClient();
+    client.getIssue.mockResolvedValueOnce(
+      response({
+        ...issue(),
+        title: "Dependency Dashboard",
+        body: "Renovate updates and detected dependencies.\n- [ ] Update package dependencies",
+        labels: ["automated", "renovate", "dependencies"],
+      }),
+    );
+    const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
+    expect(report.score).toBeLessThanOrEqual(20);
+    expect(report.decisionReason).toBe(
+      "Automated dependency/tracking issue rather than a standalone contribution task.",
+    );
+  });
+
+  it("describes incomplete competition evidence as reduced confidence, not a verdict gate", async () => {
+    const client = evidenceClient();
+    client.listRecentPullRequests.mockRejectedValueOnce(
+      new GitHubClientError("not_found", "missing"),
+    );
+    const report = await createAnalysisService({ client, now: () => asOf })(referenceUrl);
+    expect(report.risks).toContain(
+      "Competition evidence is incomplete; treat the availability assessment with medium confidence.",
+    );
+    expect(report.risks.join(" ")).not.toContain("not strong enough for a Pursue recommendation");
   });
 
   it("gates a Node.js-style unresolved policy discussion so it cannot produce Pursue", async () => {
