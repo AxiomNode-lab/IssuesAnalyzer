@@ -1,20 +1,173 @@
 import { describe, expect, it } from "vitest";
-import { analyzeMaintainerResponsiveness, type InteractionEvidence, type ResponsivenessInput, type ThreadEvidence } from "./index";
-const asOf=new Date("2026-08-26T00:00:00.000Z"),repositoryUrl="https://github.com/example/project";
-function interaction(_hours:number,overrides:Partial<InteractionEvidence>={}):InteractionEvidence{return{actorLogin:"maintainer",actorIsBot:false,actorIsMaintainer:true,createdAt:new Date("2026-08-01T00:00:00.000Z"),sourceUrl:`${repositoryUrl}/issues/1#comment`,...overrides}}
-function thread(responseHours:number|null,index=1,extra:readonly InteractionEvidence[]=[]):ThreadEvidence{const openedAt=new Date(`2026-08-${String(index).padStart(2,"0")}T00:00:00.000Z`);const response=responseHours===null?[]:[interaction(responseHours,{createdAt:new Date(openedAt.getTime()+responseHours*3_600_000),sourceUrl:`${repositoryUrl}/issues/${index}#maintainer-response`})];return{kind:index%2===0?"pull_request":"issue",openedAt,sourceUrl:`${repositoryUrl}/issues/${index}`,interactions:[...extra.map((x,i)=>({...x,createdAt:new Date(openedAt.getTime()+(i+1)*3_600_000)})),...response]}}
-function input(overrides:Partial<ResponsivenessInput>={}):ResponsivenessInput{return{asOf,repositoryUrl,threads:[thread(12,1),thread(24,2),thread(36,3)],...overrides}}
-describe("analyzeMaintainerResponsiveness",()=>{
- it("classifies a responsive historical median",()=>{const r=analyzeMaintainerResponsiveness(input());expect(r.status).toBe("responsive");expect(r.score).toBe(85);expect(r.facts).toContainEqual(expect.objectContaining({key:"responsiveness.observedMedianHours",value:24}))});
- it("does not call fast observed replies slow only because coverage is partial",()=>{const r=analyzeMaintainerResponsiveness(input({threads:[thread(8,1),thread(12,2),thread(null,3),thread(null,4),thread(null,5)]}));expect(r.status).toBe("mixed");expect(r.score).toBe(65);expect(r.facts).toContainEqual(expect.objectContaining({key:"responsiveness.responseCoveragePercent",value:40}))});
- it("keeps very low coverage cautious even when the few replies are fast",()=>{const r=analyzeMaintainerResponsiveness(input({threads:[thread(10,1),...Array.from({length:9},(_,i)=>thread(null,i+2))]}));expect(r.status).toBe("mixed");expect(r.score).toBe(55);expect(r.confidence.level).toBe("low")});
- it("uses median so an extreme delay does not dominate",()=>expect(analyzeMaintainerResponsiveness(input({threads:[thread(1,1),thread(2,2),thread(500,3)]})).status).toBe("responsive"));
- it("classifies mixed and slow historical patterns",()=>{expect(analyzeMaintainerResponsiveness(input({threads:[thread(72,1),thread(96,2),thread(120,3)]})).status).toBe("mixed");expect(analyzeMaintainerResponsiveness(input({threads:[thread(200,1),thread(240,2),thread(300,3)]})).status).toBe("slow")});
- it("reports insufficient evidence for sparse samples",()=>{const r=analyzeMaintainerResponsiveness(input({threads:[thread(4,1)]}));expect(r.status).toBe("insufficient");expect(r.confidence).toEqual({level:"low",value:35})});
- it("treats a sufficiently large unanswered sample as negative evidence",()=>{const r=analyzeMaintainerResponsiveness(input({threads:Array.from({length:10},(_,i)=>thread(null,i+1))}));expect(r.status).toBe("slow");expect(r.score).toBe(25);expect(r.confidence.level).toBe("high")});
- it("handles missing samples without fabricating responsiveness",()=>expect(analyzeMaintainerResponsiveness(input({threads:null})).confidence).toEqual({level:"low",value:0}));
- it("ignores bot and non-maintainer interactions",()=>{const openedAt=new Date("2026-08-01T00:00:00.000Z");const ignored=[interaction(1,{actorLogin:"automation[bot]",actorIsBot:true,createdAt:new Date(openedAt.getTime()+3_600_000)}),interaction(2,{actorLogin:"contributor",actorIsMaintainer:false,createdAt:new Date(openedAt.getTime()+7_200_000)})];expect(analyzeMaintainerResponsiveness(input({threads:[thread(12,1,ignored),thread(24,2,ignored),thread(36,3,ignored)]})).facts).toContainEqual(expect.objectContaining({key:"responsiveness.observedMedianHours",value:24}))});
- it("never presents historical observations as a reply guarantee",()=>{const r=analyzeMaintainerResponsiveness(input());expect(r.inferences[0]?.caution).toContain("does not predict");expect(r.inferences[0]?.caution).toContain("guarantee")});
- it("rejects impossible timestamps",()=>expect(()=>analyzeMaintainerResponsiveness(input({threads:[{...thread(null,1),interactions:[interaction(1,{createdAt:new Date("2026-07-01T00:00:00.000Z")})]}]}))).toThrow(new RangeError("Interaction date cannot be before thread opening.")));
- it("is deterministic and returns provenance",()=>{const r=analyzeMaintainerResponsiveness(input());expect(r).toEqual(analyzeMaintainerResponsiveness(input()));for(const f of r.facts)expect(f.sourceUrl).not.toBe("")});
+import {
+  analyzeMaintainerResponsiveness,
+  type InteractionEvidence,
+  type ResponsivenessInput,
+  type ThreadEvidence,
+} from "./index";
+const asOf = new Date("2026-08-26T00:00:00.000Z"),
+  repositoryUrl = "https://github.com/example/project";
+function interaction(
+  _hours: number,
+  overrides: Partial<InteractionEvidence> = {},
+): InteractionEvidence {
+  return {
+    actorLogin: "maintainer",
+    actorIsBot: false,
+    actorIsMaintainer: true,
+    createdAt: new Date("2026-08-01T00:00:00.000Z"),
+    sourceUrl: `${repositoryUrl}/issues/1#comment`,
+    ...overrides,
+  };
+}
+function thread(
+  responseHours: number | null,
+  index = 1,
+  extra: readonly InteractionEvidence[] = [],
+): ThreadEvidence {
+  const openedAt = new Date(`2026-08-${String(index).padStart(2, "0")}T00:00:00.000Z`);
+  const response =
+    responseHours === null
+      ? []
+      : [
+          interaction(responseHours, {
+            createdAt: new Date(openedAt.getTime() + responseHours * 3_600_000),
+            sourceUrl: `${repositoryUrl}/issues/${index}#maintainer-response`,
+          }),
+        ];
+  return {
+    kind: index % 2 === 0 ? "pull_request" : "issue",
+    openedAt,
+    sourceUrl: `${repositoryUrl}/issues/${index}`,
+    interactions: [
+      ...extra.map((x, i) => ({
+        ...x,
+        createdAt: new Date(openedAt.getTime() + (i + 1) * 3_600_000),
+      })),
+      ...response,
+    ],
+  };
+}
+function input(overrides: Partial<ResponsivenessInput> = {}): ResponsivenessInput {
+  return {
+    asOf,
+    repositoryUrl,
+    threads: [thread(12, 1), thread(24, 2), thread(36, 3)],
+    ...overrides,
+  };
+}
+describe("analyzeMaintainerResponsiveness", () => {
+  it("classifies a responsive historical median", () => {
+    const r = analyzeMaintainerResponsiveness(input());
+    expect(r.status).toBe("responsive");
+    expect(r.score).toBe(85);
+    expect(r.facts).toContainEqual(
+      expect.objectContaining({ key: "responsiveness.observedMedianHours", value: 24 }),
+    );
+  });
+  it("does not call fast observed replies slow only because coverage is partial", () => {
+    const r = analyzeMaintainerResponsiveness(
+      input({
+        threads: [thread(8, 1), thread(12, 2), thread(null, 3), thread(null, 4), thread(null, 5)],
+      }),
+    );
+    expect(r.status).toBe("mixed");
+    expect(r.score).toBe(65);
+    expect(r.facts).toContainEqual(
+      expect.objectContaining({ key: "responsiveness.responseCoveragePercent", value: 40 }),
+    );
+  });
+  it("keeps very low coverage cautious even when the few replies are fast", () => {
+    const r = analyzeMaintainerResponsiveness(
+      input({
+        threads: [thread(10, 1), ...Array.from({ length: 9 }, (_, i) => thread(null, i + 2))],
+      }),
+    );
+    expect(r.status).toBe("mixed");
+    expect(r.score).toBe(55);
+    expect(r.confidence.level).toBe("low");
+  });
+  it("uses median so an extreme delay does not dominate", () =>
+    expect(
+      analyzeMaintainerResponsiveness(
+        input({ threads: [thread(1, 1), thread(2, 2), thread(500, 3)] }),
+      ).status,
+    ).toBe("responsive"));
+  it("classifies mixed and slow historical patterns", () => {
+    expect(
+      analyzeMaintainerResponsiveness(
+        input({ threads: [thread(72, 1), thread(96, 2), thread(120, 3)] }),
+      ).status,
+    ).toBe("mixed");
+    expect(
+      analyzeMaintainerResponsiveness(
+        input({ threads: [thread(200, 1), thread(240, 2), thread(300, 3)] }),
+      ).status,
+    ).toBe("slow");
+  });
+  it("reports insufficient evidence for sparse samples", () => {
+    const r = analyzeMaintainerResponsiveness(input({ threads: [thread(4, 1)] }));
+    expect(r.status).toBe("insufficient");
+    expect(r.confidence).toEqual({ level: "low", value: 35 });
+  });
+  it("treats a sufficiently large unanswered sample as negative evidence", () => {
+    const r = analyzeMaintainerResponsiveness(
+      input({ threads: Array.from({ length: 10 }, (_, i) => thread(null, i + 1)) }),
+    );
+    expect(r.status).toBe("slow");
+    expect(r.score).toBe(25);
+    expect(r.confidence.level).toBe("high");
+  });
+  it("handles missing samples without fabricating responsiveness", () =>
+    expect(analyzeMaintainerResponsiveness(input({ threads: null })).confidence).toEqual({
+      level: "low",
+      value: 0,
+    }));
+  it("ignores bot and non-maintainer interactions", () => {
+    const openedAt = new Date("2026-08-01T00:00:00.000Z");
+    const ignored = [
+      interaction(1, {
+        actorLogin: "automation[bot]",
+        actorIsBot: true,
+        createdAt: new Date(openedAt.getTime() + 3_600_000),
+      }),
+      interaction(2, {
+        actorLogin: "contributor",
+        actorIsMaintainer: false,
+        createdAt: new Date(openedAt.getTime() + 7_200_000),
+      }),
+    ];
+    expect(
+      analyzeMaintainerResponsiveness(
+        input({
+          threads: [thread(12, 1, ignored), thread(24, 2, ignored), thread(36, 3, ignored)],
+        }),
+      ).facts,
+    ).toContainEqual(
+      expect.objectContaining({ key: "responsiveness.observedMedianHours", value: 24 }),
+    );
+  });
+  it("never presents historical observations as a reply guarantee", () => {
+    const r = analyzeMaintainerResponsiveness(input());
+    expect(r.inferences[0]?.caution).toContain("does not predict");
+    expect(r.inferences[0]?.caution).toContain("guarantee");
+  });
+  it("rejects impossible timestamps", () =>
+    expect(() =>
+      analyzeMaintainerResponsiveness(
+        input({
+          threads: [
+            {
+              ...thread(null, 1),
+              interactions: [interaction(1, { createdAt: new Date("2026-07-01T00:00:00.000Z") })],
+            },
+          ],
+        }),
+      ),
+    ).toThrow(new RangeError("Interaction date cannot be before thread opening.")));
+  it("is deterministic and returns provenance", () => {
+    const r = analyzeMaintainerResponsiveness(input());
+    expect(r).toEqual(analyzeMaintainerResponsiveness(input()));
+    for (const f of r.facts) expect(f.sourceUrl).not.toBe("");
+  });
 });
