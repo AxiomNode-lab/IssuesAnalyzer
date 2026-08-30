@@ -61,15 +61,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Format UI files
+      - name: Format changed source files
         if: github.event_name == 'pull_request'
         run: |
-          pnpm exec prettier --write apps/web/src/app/globals.css apps/web/src/app/page.tsx
+          pnpm exec prettier --write \
+            apps/web/src/app/globals.css \
+            apps/web/src/app/page.tsx \
+            apps/web/src/components/analysis-report.tsx \
+            apps/web/src/components/issue-analyzer.tsx \
+            packages/actionability-analyzer/src/index.ts \
+            packages/competition-analyzer/src/index.ts \
+            packages/responsiveness-analyzer/src/index.ts \
+            packages/responsiveness-analyzer/src/index.test.ts
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add apps/web/src/app/globals.css apps/web/src/app/page.tsx
-            git commit -m "style(ui): apply repository formatting"
+            git add \
+              apps/web/src/app/globals.css \
+              apps/web/src/app/page.tsx \
+              apps/web/src/components/analysis-report.tsx \
+              apps/web/src/components/issue-analyzer.tsx \
+              packages/actionability-analyzer/src/index.ts \
+              packages/competition-analyzer/src/index.ts \
+              packages/responsiveness-analyzer/src/index.ts \
+              packages/responsiveness-analyzer/src/index.test.ts
+            git commit -m "style: apply repository formatting"
             git push origin HEAD:${{ github.head_ref }}
           fi
 
