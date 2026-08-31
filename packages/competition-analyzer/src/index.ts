@@ -132,7 +132,7 @@ function referencesIssue(text: string, number: number, url: string): boolean {
   const shortReference = `#${number}`;
   const index = text.indexOf(shortReference);
   if (index === -1) return false;
-  const before = index === 0 ? " " : text[index - 1] ?? " ";
+  const before = index === 0 ? " " : (text[index - 1] ?? " ");
   const after = text[index + shortReference.length] ?? " ";
   return /\s/.test(before) && /[\s.,;:!?)}\]]/.test(after);
 }
@@ -169,9 +169,24 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
   }
   for (const item of input.pullRequests ?? []) validatePullRequest(item, input.asOf);
 
-  const comments = newestBounded(input.comments ?? [], MAX_COMMENTS, (item) => item.createdAt, (item) => item.sourceUrl);
-  const timeline = newestBounded(input.timeline ?? [], MAX_TIMELINE_EVENTS, (item) => item.createdAt, (item) => `${item.event}:${item.sourceUrl}:${item.referencedPullRequest?.sourceUrl ?? ""}`);
-  const pullRequests = newestBounded(input.pullRequests ?? [], MAX_PULL_REQUESTS, (item) => item.updatedAt, (item) => item.sourceUrl);
+  const comments = newestBounded(
+    input.comments ?? [],
+    MAX_COMMENTS,
+    (item) => item.createdAt,
+    (item) => item.sourceUrl,
+  );
+  const timeline = newestBounded(
+    input.timeline ?? [],
+    MAX_TIMELINE_EVENTS,
+    (item) => item.createdAt,
+    (item) => `${item.event}:${item.sourceUrl}:${item.referencedPullRequest?.sourceUrl ?? ""}`,
+  );
+  const pullRequests = newestBounded(
+    input.pullRequests ?? [],
+    MAX_PULL_REQUESTS,
+    (item) => item.updatedAt,
+    (item) => item.sourceUrl,
+  );
 
   const claimComments = comments.filter(
     (comment) =>
@@ -190,7 +205,9 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
   const byUrl = new Map<string, PullRequestEvidence>();
   for (const pr of explicitlyReferenced) byUrl.set(pr.sourceUrl, pr);
   for (const pr of timelinePullRequests) byUrl.set(pr.sourceUrl, pr);
-  const linked = [...byUrl.values()].sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
+  const linked = [...byUrl.values()].sort(
+    (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
+  );
   const active = linked.filter((pr) => pr.state === "open");
   const draft = active.filter((pr) => pr.draft);
   const merged = linked.filter((pr) => pr.mergedAt !== null);
@@ -212,12 +229,42 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
 
   const facts = [
     fact("issue.assigneeCount", input.issue.assignees.length, input.issue.canonicalUrl, 0),
-    fact("competition.linkedPullRequestCount", linked.length, freshest?.sourceUrl ?? input.issue.canonicalUrl, freshest ? daysBetween(input.asOf, freshest.updatedAt) : 0),
-    fact("competition.activePullRequestCount", active.length, active[0]?.sourceUrl ?? input.issue.canonicalUrl, active[0] ? daysBetween(input.asOf, active[0].updatedAt) : 0),
-    fact("competition.draftPullRequestCount", draft.length, draft[0]?.sourceUrl ?? input.issue.canonicalUrl, draft[0] ? daysBetween(input.asOf, draft[0].updatedAt) : 0),
-    fact("competition.mergedPullRequestCount", merged.length, merged[0]?.sourceUrl ?? input.issue.canonicalUrl, merged[0]?.mergedAt ? daysBetween(input.asOf, merged[0].mergedAt) : 0),
-    fact("competition.closedPullRequestCount", closed.length, closed[0]?.sourceUrl ?? input.issue.canonicalUrl, closed[0]?.closedAt ? daysBetween(input.asOf, closed[0].closedAt) : 0),
-    fact("competition.claimCommentCount", claimComments.length, latestClaim?.sourceUrl ?? input.issue.canonicalUrl, latestClaim ? daysBetween(input.asOf, latestClaim.createdAt) : 0),
+    fact(
+      "competition.linkedPullRequestCount",
+      linked.length,
+      freshest?.sourceUrl ?? input.issue.canonicalUrl,
+      freshest ? daysBetween(input.asOf, freshest.updatedAt) : 0,
+    ),
+    fact(
+      "competition.activePullRequestCount",
+      active.length,
+      active[0]?.sourceUrl ?? input.issue.canonicalUrl,
+      active[0] ? daysBetween(input.asOf, active[0].updatedAt) : 0,
+    ),
+    fact(
+      "competition.draftPullRequestCount",
+      draft.length,
+      draft[0]?.sourceUrl ?? input.issue.canonicalUrl,
+      draft[0] ? daysBetween(input.asOf, draft[0].updatedAt) : 0,
+    ),
+    fact(
+      "competition.mergedPullRequestCount",
+      merged.length,
+      merged[0]?.sourceUrl ?? input.issue.canonicalUrl,
+      merged[0]?.mergedAt ? daysBetween(input.asOf, merged[0].mergedAt) : 0,
+    ),
+    fact(
+      "competition.closedPullRequestCount",
+      closed.length,
+      closed[0]?.sourceUrl ?? input.issue.canonicalUrl,
+      closed[0]?.closedAt ? daysBetween(input.asOf, closed[0].closedAt) : 0,
+    ),
+    fact(
+      "competition.claimCommentCount",
+      claimComments.length,
+      latestClaim?.sourceUrl ?? input.issue.canonicalUrl,
+      latestClaim ? daysBetween(input.asOf, latestClaim.createdAt) : 0,
+    ),
     fact("competition.nonPullRequestReferenceCount", nonPr.length, input.issue.canonicalUrl, 0),
   ];
 
@@ -235,14 +282,16 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
       key: "competition.activeImplementation",
       value: true,
       basisFactKeys: ["competition.activePullRequestCount", "competition.draftPullRequestCount"],
-      caution: "An open or draft linked pull request is active visible work, but it may still be abandoned.",
+      caution:
+        "An open or draft linked pull request is active visible work, but it may still be abandoned.",
     });
   } else if (merged.length + closed.length) {
     inferences.push({
       key: "competition.historicalImplementation",
       value: true,
       basisFactKeys: ["competition.mergedPullRequestCount", "competition.closedPullRequestCount"],
-      caution: "Closed or merged work is historical evidence and is weaker than an active implementation.",
+      caution:
+        "Closed or merged work is historical evidence and is weaker than an active implementation.",
     });
   }
   if (claimComments.length) {
@@ -250,14 +299,19 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
       key: "competition.claimLanguage",
       value: true,
       basisFactKeys: ["competition.claimCommentCount"],
-      caution: "Claim language indicates intent only; it is weighted below assignment or an active pull request.",
+      caution:
+        "Claim language indicates intent only; it is weighted below assignment or an active pull request.",
     });
   }
   if (!input.issue.assignees.length && !active.length && !claimComments.length) {
     inferences.push({
       key: "competition.noneActiveVisible",
       value: true,
-      basisFactKeys: ["issue.assigneeCount", "competition.activePullRequestCount", "competition.claimCommentCount"],
+      basisFactKeys: [
+        "issue.assigneeCount",
+        "competition.activePullRequestCount",
+        "competition.claimCommentCount",
+      ],
       caution: "No active visible signal does not guarantee nobody is working privately.",
     });
   }
@@ -267,14 +321,24 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
   if (input.comments === null) warnings.push("Comment evidence is unavailable.");
   if (input.timeline === null) warnings.push("Timeline evidence is unavailable.");
   if (input.pullRequests === null) warnings.push("Pull request evidence is unavailable.");
-  if (!completeness.timeline) warnings.push("Timeline evidence reached its collection bound; additional linked work may exist.");
-  if (!completeness.pullRequests) warnings.push("Repository pull request evidence reached its collection bound.");
-  if ((input.comments?.length ?? 0) > MAX_COMMENTS) warnings.push("Comment evidence was bounded to 500 records.");
-  if ((input.timeline?.length ?? 0) > MAX_TIMELINE_EVENTS) warnings.push("Timeline evidence was bounded to 300 records.");
-  if ((input.pullRequests?.length ?? 0) > MAX_PULL_REQUESTS) warnings.push("Pull request evidence was bounded to 100 records.");
+  if (!completeness.timeline)
+    warnings.push(
+      "Timeline evidence reached its collection bound; additional linked work may exist.",
+    );
+  if (!completeness.pullRequests)
+    warnings.push("Repository pull request evidence reached its collection bound.");
+  if ((input.comments?.length ?? 0) > MAX_COMMENTS)
+    warnings.push("Comment evidence was bounded to 500 records.");
+  if ((input.timeline?.length ?? 0) > MAX_TIMELINE_EVENTS)
+    warnings.push("Timeline evidence was bounded to 300 records.");
+  if ((input.pullRequests?.length ?? 0) > MAX_PULL_REQUESTS)
+    warnings.push("Pull request evidence was bounded to 100 records.");
 
   const evidenceConfidence = confidence(
-    1 + Number(input.comments !== null) + Number(input.timeline !== null) + Number(input.pullRequests !== null),
+    1 +
+      Number(input.comments !== null) +
+      Number(input.timeline !== null) +
+      Number(input.pullRequests !== null),
     Number(input.timeline !== null && !completeness.timeline) +
       Number(input.pullRequests !== null && !completeness.pullRequests),
   );
