@@ -122,7 +122,7 @@ describe("live analysis orchestration", () => {
       issueNumber: 27888,
       issueTitle: "Real issue title",
       issueUrl: referenceUrl,
-      scoreVersion: "opportunity-score-v3",
+      scoreVersion: "opportunity-score-v4",
       stale: false,
     });
     expect(report.components.map((component) => component.key)).toEqual([
