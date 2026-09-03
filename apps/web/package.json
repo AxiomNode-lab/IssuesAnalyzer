@@ -17,7 +17,7 @@
     "@opportunity-radar/responsiveness-analyzer": "workspace:*",
     "@opportunity-radar/scoring-engine": "workspace:*",
     "next": "16.3.3",
-    "postgres": "3.4.7",
+    "postgres": "3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "redis": "6.2.1"
