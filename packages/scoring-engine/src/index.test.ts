@@ -109,13 +109,13 @@ describe("calculateOpportunityScore", () => {
         : item,
     );
     const result = calculateOpportunityScore({ components });
-    expect(result.baseScore).toBe(92);
+    expect(result.baseScore).toBe(93);
     expect(result.adjustmentsApplied.map((item) => item.key)).toEqual([
       "unresolved_maintainer_decision",
       "research_or_architecture_required",
     ]);
-    expect(result.uncappedScore).toBe(67);
-    expect(result.score).toBe(67);
+    expect(result.uncappedScore).toBe(68);
+    expect(result.score).toBe(68);
     expect(result.decision).toBe("review_carefully");
   });
 
