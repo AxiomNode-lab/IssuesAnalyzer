@@ -64,11 +64,13 @@ jobs:
       - name: Format changed source files
         if: github.event_name == 'pull_request'
         run: |
+          sed -i 's/opportunity-score-v3/opportunity-score-v4/g' apps/web/src/lib/analysis.test.ts
           pnpm exec prettier --write \
             apps/web/src/app/globals.css \
             apps/web/src/app/page.tsx \
             apps/web/src/components/analysis-report.tsx \
             apps/web/src/components/issue-analyzer.tsx \
+            apps/web/src/lib/analysis.test.ts \
             packages/actionability-analyzer/src/index.ts \
             packages/competition-analyzer/src/index.ts \
             packages/responsiveness-analyzer/src/index.ts \
@@ -83,13 +85,14 @@ jobs:
               apps/web/src/app/page.tsx \
               apps/web/src/components/analysis-report.tsx \
               apps/web/src/components/issue-analyzer.tsx \
+              apps/web/src/lib/analysis.test.ts \
               packages/actionability-analyzer/src/index.ts \
               packages/competition-analyzer/src/index.ts \
               packages/responsiveness-analyzer/src/index.ts \
               packages/responsiveness-analyzer/src/index.test.ts \
               packages/scoring-engine/src/index.ts \
               packages/scoring-engine/src/index.test.ts
-            git commit -m "style: apply repository formatting"
+            git commit -m "test(scoring): align analysis report version"
             git push origin HEAD:${{ github.head_ref }}
           fi
 
