@@ -23,6 +23,7 @@ describe("security hardening", () => {
     expect(development["X-Frame-Options"]).toBe("DENY");
     expect(development["Strict-Transport-Security"]).toBeUndefined();
     expect(production["Strict-Transport-Security"]).toContain("max-age=31536000");
+    expect(production["Cross-Origin-Opener-Policy"]).toBe("same-origin");
     expect(contentSecurityPolicy()).not.toContain("default-src *");
   });
 
@@ -74,9 +75,16 @@ describe("security hardening", () => {
   });
 
   it("separates authenticated and anonymous abuse-control keys", () => {
+    process.env.TRUSTED_PROXY_COUNT = "1";
     const headers = new Headers({ "x-forwarded-for": "203.0.113.5, 10.0.0.1" });
     const fake = { headers } as never;
     expect(clientRateLimitKey(fake)).toBe("ip:203.0.113.5");
     expect(clientRateLimitKey(fake, "user-1")).toBe("user:user-1");
+    delete process.env.TRUSTED_PROXY_COUNT;
+  });
+
+  it("ignores forwarding headers unless proxy trust is explicit", () => {
+    const fake = { headers: new Headers({ "x-forwarded-for": "203.0.113.5" }) } as never;
+    expect(clientRateLimitKey(fake)).toBe("ip:unknown");
   });
 });

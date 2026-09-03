@@ -1,12 +1,74 @@
 import type { NextRequest } from "next/server";
+import { isIP } from "node:net";
+import { createClient } from "redis";
 import { FixedWindowRateLimiter } from "../../../../packages/github-client/src/resilience";
 
 const DEFAULT_MAX_BODY_BYTES = 32 * 1024;
 const SENSITIVE_KEY = /(?:authorization|cookie|csrf|secret|token|password|database|session)/i;
 const ABSOLUTE_URL = /^[a-z][a-z0-9+.-]*:/i;
 
-const anonymousLimiter = new FixedWindowRateLimiter(20, 10 * 60 * 1000);
-const authenticatedLimiter = new FixedWindowRateLimiter(60, 10 * 60 * 1000);
+type LimiterPolicy = Readonly<{ name: string; limit: number; windowMs: number }>;
+const POLICIES = {
+  anonymousBurst: { name: "anonymous-burst", limit: 5, windowMs: 30_000 },
+  anonymousSustained: { name: "anonymous-sustained", limit: 20, windowMs: 10 * 60_000 },
+  authenticatedBurst: { name: "authenticated-burst", limit: 15, windowMs: 30_000 },
+  authenticatedSustained: { name: "authenticated-sustained", limit: 60, windowMs: 10 * 60_000 },
+} satisfies Record<string, LimiterPolicy>;
+const localLimiters = new Map<string, FixedWindowRateLimiter>();
+let redisClient: ReturnType<typeof createClient> | undefined;
+let redisConnecting: Promise<void> | undefined;
+let redisUnavailableUntil = 0;
+
+function localConsume(policy: LimiterPolicy, key: string) {
+  let limiter = localLimiters.get(policy.name);
+  if (!limiter) {
+    limiter = new FixedWindowRateLimiter(policy.limit, policy.windowMs);
+    localLimiters.set(policy.name, limiter);
+  }
+  return limiter.consume(key);
+}
+
+async function distributedConsume(policy: LimiterPolicy, key: string) {
+  const redisUrl = process.env.REDIS_URL?.trim();
+  if (!redisUrl) return localConsume(policy, key);
+  if (Date.now() < redisUnavailableUntil) return localConsume(policy, key);
+  try {
+    if (!redisClient) {
+      redisClient = createClient({ url: redisUrl });
+      redisClient.on("error", () => undefined);
+    }
+    if (!redisClient.isOpen) {
+      redisConnecting ??= redisClient
+        .connect()
+        .then(() => undefined)
+        .finally(() => {
+          redisConnecting = undefined;
+        });
+      await redisConnecting;
+    }
+    const redisKey = `gor:rate-limit:${policy.name}:${key}`;
+    const result = (await redisClient.eval(
+      "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('PEXPIRE',KEYS[1],ARGV[1]) end; return {n,redis.call('PTTL',KEYS[1])}",
+      { keys: [redisKey], arguments: [String(policy.windowMs)] },
+    )) as [number, number];
+    const count = Number(result[0]);
+    const ttlMs = Math.max(1, Number(result[1]));
+    redisUnavailableUntil = 0;
+    return {
+      allowed: count <= policy.limit,
+      remaining: Math.max(0, policy.limit - count),
+      retryAfterSeconds: count <= policy.limit ? 0 : Math.max(1, Math.ceil(ttlMs / 1000)),
+    };
+  } catch {
+    // Cache/rate-limit infrastructure must not crash the service. The bounded local limiter is a
+    // conservative degraded fallback; production logs surface the missing shared protection.
+    redisUnavailableUntil = Date.now() + 30_000;
+    console.warn(
+      JSON.stringify({ level: "warn", event: "rate_limit_store_unavailable", retryInMs: 30_000 }),
+    );
+    return localConsume(policy, key);
+  }
+}
 
 export function contentSecurityPolicy(): string {
   return [
@@ -30,6 +92,8 @@ export function securityHeaders(production: boolean): Record<string, string> {
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
   };
   if (production) {
     headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
@@ -48,14 +112,30 @@ export function isApiPreflightAllowed(request: NextRequest): boolean {
 
 export function clientRateLimitKey(request: NextRequest, userId?: string): string {
   if (userId) return `user:${userId}`;
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return `ip:${forwarded || realIp || "unknown"}`;
+  const trustedProxyCount = Number.parseInt(process.env.TRUSTED_PROXY_COUNT ?? "0", 10);
+  if (Number.isInteger(trustedProxyCount) && trustedProxyCount > 0) {
+    const chain = request.headers
+      .get("x-forwarded-for")
+      ?.split(",")
+      .map((value) => value.trim())
+      .filter((value) => isIP(value) !== 0);
+    const candidate = chain?.at(-(trustedProxyCount + 1));
+    if (candidate) return `ip:${candidate}`;
+    const realIp = request.headers.get("x-real-ip")?.trim();
+    if (realIp && isIP(realIp)) return `ip:${realIp}`;
+  }
+  return "ip:unknown";
 }
 
-export function consumeAbuseBudget(request: NextRequest, userId?: string) {
-  const limiter = userId ? authenticatedLimiter : anonymousLimiter;
-  return limiter.consume(clientRateLimitKey(request, userId));
+export async function consumeAbuseBudget(request: NextRequest, userId?: string) {
+  const policies = userId
+    ? [POLICIES.authenticatedBurst, POLICIES.authenticatedSustained]
+    : [POLICIES.anonymousBurst, POLICIES.anonymousSustained];
+  const decisions = await Promise.all(
+    policies.map((policy) => distributedConsume(policy, clientRateLimitKey(request, userId))),
+  );
+  const rejected = decisions.find((decision) => !decision.allowed);
+  return rejected ?? decisions[decisions.length - 1]!;
 }
 
 export async function readBoundedJson<T>(

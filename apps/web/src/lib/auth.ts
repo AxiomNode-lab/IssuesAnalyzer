@@ -120,6 +120,11 @@ export function verifyCsrf(
   return constantTimeEqual(cookieToken, submittedToken);
 }
 
+export function verifyOAuthState(expected: string | undefined, submitted: string | null): boolean {
+  if (!expected || !submitted) return false;
+  return constantTimeEqual(expected, submitted);
+}
+
 export function assertOwner(session: Session | null, ownerUserId: string): Session {
   if (!session) throw new Error("UNAUTHENTICATED");
   if (session.user.userId !== ownerUserId) throw new Error("FORBIDDEN");

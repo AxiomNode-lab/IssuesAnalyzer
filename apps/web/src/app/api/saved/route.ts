@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
   if (!assertSameOrigin(request)) return crossOrigin();
   const session = await sessionFor(request);
   if (!session) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  const limit = consumeAbuseBudget(request, session.user.userId);
+  const limit = await consumeAbuseBudget(request, session.user.userId);
   if (!limit.allowed) return rateLimited(limit.retryAfterSeconds);
   return NextResponse.json({ items: await listSavedOpportunities(session.user.userId) });
 }
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   if (!assertSameOrigin(request)) return crossOrigin();
   const session = await sessionFor(request);
   if (!session) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  const limit = consumeAbuseBudget(request, session.user.userId);
+  const limit = await consumeAbuseBudget(request, session.user.userId);
   if (!limit.allowed) return rateLimited(limit.retryAfterSeconds);
   if (!verifyCsrf(request.cookies.get(CSRF_COOKIE)?.value, request.headers.get("x-csrf-token"))) {
     return NextResponse.json({ error: "Invalid CSRF token." }, { status: 403 });

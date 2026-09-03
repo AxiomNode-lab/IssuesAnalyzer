@@ -98,4 +98,9 @@ describe("parseGitHubIssueUrl", () => {
       }
     }
   });
+
+  it("rejects oversized input before URL parsing", () => {
+    const result = parseGitHubIssueUrl(`https://github.com/${"a".repeat(3_000)}`);
+    expect(result).toMatchObject({ ok: false, error: { code: "MALFORMED_URL" } });
+  });
 });

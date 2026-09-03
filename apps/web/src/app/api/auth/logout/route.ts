@@ -9,11 +9,11 @@ export async function OPTIONS(request: NextRequest) {
     : new NextResponse(null, { status: 403 });
 }
 
-export function POST(request: NextRequest) {
+export async function POST(request: NextRequest) {
   if (!assertSameOrigin(request)) {
     return NextResponse.json({ error: "Cross-origin requests are not allowed." }, { status: 403 });
   }
-  const limit = consumeAbuseBudget(request);
+  const limit = await consumeAbuseBudget(request);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many requests." },

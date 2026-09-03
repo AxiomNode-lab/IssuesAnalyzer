@@ -37,6 +37,9 @@ function failure(code: GitHubIssueUrlErrorCode, message: string): GitHubIssueUrl
 }
 
 export function parseGitHubIssueUrl(input: string): GitHubIssueUrlResult {
+  if (input.length > 2_048) {
+    return failure("MALFORMED_URL", "The GitHub issue URL is too long.");
+  }
   if (/[\\\u0000-\u001F\u007F]/.test(input)) {
     return failure("MALFORMED_URL", "Control characters and backslashes are not allowed.");
   }

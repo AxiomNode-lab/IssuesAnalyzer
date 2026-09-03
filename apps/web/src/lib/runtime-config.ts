@@ -31,3 +31,28 @@ export function runtimeConfig(env: RuntimeEnvironment = process.env): RuntimeCon
 export function isProductionLike(config: RuntimeConfig): boolean {
   return config.environment === "staging" || config.environment === "production";
 }
+
+export function applicationOrigin(
+  requestOrigin: string,
+  env: RuntimeEnvironment = process.env,
+): string {
+  const configured = env.APP_ORIGIN?.trim();
+  if (!configured) {
+    if (isProductionLike(runtimeConfig(env)))
+      throw new Error("APP_ORIGIN is required in production-like environments.");
+    return new URL(requestOrigin).origin;
+  }
+  const url = new URL(configured);
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    url.origin !== configured
+  ) {
+    throw new Error(
+      "APP_ORIGIN must be a canonical HTTPS origin without credentials, port, path, query, or fragment.",
+    );
+  }
+  return url.origin;
+}

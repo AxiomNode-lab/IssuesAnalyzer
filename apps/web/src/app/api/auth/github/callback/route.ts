@@ -7,17 +7,27 @@ import {
   encodeSession,
   randomToken,
   type Session,
+  verifyOAuthState,
 } from "../../../../../lib/auth";
 import { upsertGithubUser } from "../../../../../lib/database";
+import { githubOAuthFetch } from "../../../../../lib/github-oauth";
+import { applicationOrigin } from "../../../../../lib/runtime-config";
+import { consumeAbuseBudget } from "../../../../../lib/security";
 
 type GitHubTokenResponse = { access_token?: string; error?: string };
 type GitHubUserResponse = { id?: number; login?: string; avatar_url?: string };
 
 export async function GET(request: NextRequest) {
+  const limit = await consumeAbuseBudget(request);
+  if (!limit.allowed)
+    return NextResponse.json(
+      { error: "Too many requests." },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } },
+    );
   const code = request.nextUrl.searchParams.get("code");
   const state = request.nextUrl.searchParams.get("state");
   const expectedState = request.cookies.get(OAUTH_STATE_COOKIE)?.value;
-  if (!code || !state || !expectedState || state !== expectedState) {
+  if (!code || !verifyOAuthState(expectedState, state)) {
     return NextResponse.json({ error: "Invalid OAuth state." }, { status: 400 });
   }
 
@@ -28,18 +38,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "OAuth is not configured." }, { status: 503 });
   }
 
-  const redirectUri = `${process.env.APP_ORIGIN ?? request.nextUrl.origin}/api/auth/github/callback`;
-  const tokenResponse = await fetch("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({
-      client_id: clientId,
-      client_secret: clientSecret,
-      code,
-      redirect_uri: redirectUri,
-    }),
-    cache: "no-store",
-  });
+  const origin = applicationOrigin(request.nextUrl.origin);
+  const redirectUri = `${origin}/api/auth/github/callback`;
+  let tokenResponse: Response;
+  try {
+    tokenResponse = await githubOAuthFetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code,
+        redirect_uri: redirectUri,
+      }),
+    });
+  } catch {
+    return NextResponse.json({ error: "GitHub token exchange failed." }, { status: 502 });
+  }
   if (!tokenResponse.ok) {
     return NextResponse.json({ error: "GitHub token exchange failed." }, { status: 502 });
   }
@@ -49,14 +64,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "GitHub did not return an access token." }, { status: 502 });
   }
 
-  const userResponse = await fetch("https://api.github.com/user", {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token.access_token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    cache: "no-store",
-  });
+  let userResponse: Response;
+  try {
+    userResponse = await githubOAuthFetch("https://api.github.com/user", {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token.access_token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+  } catch {
+    return NextResponse.json({ error: "GitHub user lookup failed." }, { status: 502 });
+  }
   if (!userResponse.ok) {
     return NextResponse.json({ error: "GitHub user lookup failed." }, { status: 502 });
   }
@@ -81,7 +100,7 @@ export async function GET(request: NextRequest) {
     expiresAt: now + 8 * 60 * 60 * 1000,
   };
 
-  const response = NextResponse.redirect(process.env.APP_ORIGIN ?? request.nextUrl.origin);
+  const response = NextResponse.redirect(origin);
   response.cookies.set(SESSION_COOKIE, await encodeSession(session, sessionSecret), {
     httpOnly: true,
     sameSite: "lax",

@@ -36,6 +36,19 @@ export type GitHubClientOptions = Readonly<{
   timeoutMs?: number;
   maxRetries?: number;
   fetch?: typeof globalThis.fetch;
+  sleep?: (milliseconds: number) => Promise<void>;
+  random?: () => number;
+  onEvent?: (event: GitHubClientEvent) => void;
+}>;
+
+export type GitHubClientEvent = Readonly<{
+  type: "request" | "retry" | "timeout" | "rate_limit";
+  path: string;
+  attempt: number;
+  durationMs?: number;
+  delayMs?: number;
+  status?: number;
+  remaining?: number | null;
 }>;
 
 function boundedInteger(value: string | null): number | null {
@@ -71,12 +84,20 @@ export class GitHubClient {
   readonly #timeoutMs: number;
   readonly #maxRetries: number;
   readonly #fetch: typeof globalThis.fetch;
+  readonly #sleep: (milliseconds: number) => Promise<void>;
+  readonly #random: () => number;
+  readonly #onEvent: ((event: GitHubClientEvent) => void) | undefined;
 
   constructor(options: GitHubClientOptions = {}) {
     this.#token = options.token;
     this.#timeoutMs = Math.min(Math.max(options.timeoutMs ?? 8_000, 100), 30_000);
     this.#maxRetries = Math.min(Math.max(options.maxRetries ?? 1, 0), 2);
     this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#sleep =
+      options.sleep ??
+      ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+    this.#random = options.random ?? Math.random;
+    this.#onEvent = options.onEvent;
   }
 
   async getIssue(reference: GitHubIssueUrl): Promise<GitHubResponse<GitHubIssue>> {
@@ -206,6 +227,7 @@ export class GitHubClient {
     if (this.#token !== undefined) headers.set("Authorization", `Bearer ${this.#token}`);
 
     for (let attempt = 0; attempt <= this.#maxRetries; attempt += 1) {
+      const started = performance.now();
       try {
         const response = await this.#fetch(`${API_ORIGIN}${path}`, {
           method: "GET",
@@ -216,7 +238,22 @@ export class GitHubClient {
 
         const requestId = response.headers.get("x-github-request-id");
         if (!response.ok) {
-          if (RETRYABLE_STATUS.has(response.status) && attempt < this.#maxRetries) continue;
+          if (RETRYABLE_STATUS.has(response.status) && attempt < this.#maxRetries) {
+            await this.#backoff(path, attempt, response.status);
+            continue;
+          }
+          if (
+            response.status === 429 ||
+            (response.status === 403 && response.headers.get("x-ratelimit-remaining") === "0")
+          ) {
+            this.#onEvent?.({
+              type: "rate_limit",
+              path,
+              attempt,
+              status: response.status,
+              remaining: boundedInteger(response.headers.get("x-ratelimit-remaining")),
+            });
+          }
           throw this.#httpError(response, requestId);
         }
 
@@ -231,20 +268,51 @@ export class GitHubClient {
           });
         }
 
-        return { data: parse(payload), quota: quota(response.headers), requestId };
+        const responseQuota = quota(response.headers);
+        this.#onEvent?.({
+          type: "request",
+          path,
+          attempt,
+          status: response.status,
+          durationMs: performance.now() - started,
+          remaining: responseQuota.remaining,
+        });
+        return { data: parse(payload), quota: responseQuota, requestId };
       } catch (error) {
         if (error instanceof GitHubClientError) throw error;
         if (error instanceof DOMException && error.name === "TimeoutError") {
+          this.#onEvent?.({
+            type: "timeout",
+            path,
+            attempt,
+            durationMs: performance.now() - started,
+          });
           throw new GitHubClientError("timeout", "GitHub did not respond before the deadline.", {
             cause: error,
           });
         }
-        if (attempt < this.#maxRetries) continue;
+        if (attempt < this.#maxRetries) {
+          await this.#backoff(path, attempt);
+          continue;
+        }
         throw new GitHubClientError("network", "GitHub could not be reached.", { cause: error });
       }
     }
 
     throw new GitHubClientError("network", "GitHub could not be reached.");
+  }
+
+  async #backoff(path: string, attempt: number, status?: number): Promise<void> {
+    // 200ms, 400ms ... plus up to 100ms jitter; retries are capped at two.
+    const delayMs = 200 * 2 ** attempt + Math.min(100, Math.floor(this.#random() * 101));
+    this.#onEvent?.({
+      type: "retry",
+      path,
+      attempt: attempt + 1,
+      delayMs,
+      ...(status === undefined ? {} : { status }),
+    });
+    await this.#sleep(delayMs);
   }
 
   #httpError(response: Response, requestId: string | null): GitHubClientError {

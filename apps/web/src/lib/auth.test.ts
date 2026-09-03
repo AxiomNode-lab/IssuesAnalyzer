@@ -6,6 +6,7 @@ import {
   decodeSession,
   encodeSession,
   verifyCsrf,
+  verifyOAuthState,
   type Session,
 } from "./auth.js";
 
@@ -45,6 +46,12 @@ describe("authentication policies", () => {
     expect(verifyCsrf("token", "token")).toBe(true);
     expect(verifyCsrf("token", "other")).toBe(false);
     expect(verifyCsrf(undefined, "token")).toBe(false);
+  });
+
+  it("requires matching OAuth state", () => {
+    expect(verifyOAuthState("state-token", "state-token")).toBe(true);
+    expect(verifyOAuthState("state-token", "attacker-state")).toBe(false);
+    expect(verifyOAuthState(undefined, "state-token")).toBe(false);
   });
 
   it("enforces server-side ownership", () => {
