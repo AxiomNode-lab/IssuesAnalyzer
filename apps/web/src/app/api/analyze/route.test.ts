@@ -23,14 +23,18 @@ const report: AnalysisReportModel = {
   risks: [],
 };
 
+let requestCounter = 0;
+
 function request(body: BodyInit, headers: Record<string, string> = {}) {
+  process.env.TRUSTED_PROXY_COUNT = "1";
+  requestCounter += 1;
   return new NextRequest("http://localhost:3000/api/analyze", {
     method: "POST",
     body,
     headers: {
       "content-type": "application/json",
       origin: "http://localhost:3000",
-      "x-real-ip": `test-${Math.random()}`,
+      "x-forwarded-for": `203.0.113.${requestCounter}, 10.0.0.1`,
       ...headers,
     },
   });
@@ -94,5 +98,19 @@ describe("POST /api/analyze", () => {
     const response = await handler(request(JSON.stringify({ issueUrl: report.issueUrl })));
     expect(response.status).toBe(502);
     expect(await response.text()).not.toContain("sensitive parser detail");
+  });
+
+  it("rate limits bursts and returns Retry-After", async () => {
+    const handler = createAnalyzePostHandler(vi.fn(async () => report));
+    let response: Response | undefined;
+    for (let index = 0; index < 6; index += 1) {
+      response = await handler(
+        request(JSON.stringify({ issueUrl: report.issueUrl }), {
+          "x-forwarded-for": "198.51.100.20, 10.0.0.1",
+        }),
+      );
+    }
+    expect(response?.status).toBe(429);
+    expect(Number(response?.headers.get("retry-after"))).toBeGreaterThan(0);
   });
 });

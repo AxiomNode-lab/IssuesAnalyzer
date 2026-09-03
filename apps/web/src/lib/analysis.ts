@@ -8,6 +8,7 @@ import { parseGitHubIssueUrl } from "@opportunity-radar/domain";
 import type { GitHubIssueUrl } from "@opportunity-radar/domain";
 import {
   EVIDENCE_CACHE_POLICIES,
+  ConcurrencyLimiter,
   GitHubClient,
   GitHubClientError,
   StaleWhileRevalidateCache,
@@ -66,6 +67,10 @@ type AnalysisServiceOptions = Readonly<{
 
 const MAINTAINER_ASSOCIATIONS = new Set(["COLLABORATOR", "MEMBER", "OWNER"]);
 const RESPONSIVENESS_SAMPLE_LIMIT = 15;
+// Each analysis fans out across independent evidence endpoints. A process-wide bound protects
+// sockets, memory, and GitHub quota while retaining parallel cold-request performance.
+const MAX_CONCURRENT_GITHUB_REQUEST_TREES = 12;
+const githubConcurrency = new ConcurrencyLimiter(MAX_CONCURRENT_GITHUB_REQUEST_TREES);
 
 function observeQuota(quota: GitHubQuota): void {
   if (quota.remaining !== null) recordMetric("github_quota_remaining", quota.remaining);
@@ -243,25 +248,27 @@ async function historicalResponsivenessThreads(
   client: EvidenceClient,
 ): Promise<readonly ThreadEvidence[] | null> {
   const recentIssues = await optionalEvidence(() =>
-    client.listRecentIssues(reference, { limit: 20 }),
+    githubConcurrency.run(() => client.listRecentIssues(reference, { limit: 20 })),
   );
   if (recentIssues === null) return null;
 
   const candidates = recentIssues
     .filter((candidate) => candidate.number !== currentIssue.number)
     .slice(0, RESPONSIVENESS_SAMPLE_LIMIT);
-  const threads: ThreadEvidence[] = [];
-
-  for (const candidate of candidates) {
-    const comments = await optionalEvidence(() =>
-      client.listIssueCommentsByNumber(reference, candidate.number, {
-        perPage: 100,
-        maxPages: 1,
-      }),
-    );
-    if (comments !== null) threads.push(issueThread(candidate, comments));
-  }
-  return threads;
+  const threads = await Promise.all(
+    candidates.map(async (candidate) => {
+      const comments = await optionalEvidence(() =>
+        githubConcurrency.run(() =>
+          client.listIssueCommentsByNumber(reference, candidate.number, {
+            perPage: 100,
+            maxPages: 1,
+          }),
+        ),
+      );
+      return comments === null ? null : issueThread(candidate, comments);
+    }),
+  );
+  return threads.filter((thread): thread is ThreadEvidence => thread !== null);
 }
 
 function latestActivityFreshnessDays(activity: RepositoryActivityResult): number | null {
@@ -396,8 +403,8 @@ async function buildReport(
   asOf: Date,
 ): Promise<AnalysisReportModel> {
   const [issueResponse, repositoryResponse] = await Promise.all([
-    client.getIssue(reference),
-    client.getRepository(reference),
+    githubConcurrency.run(() => client.getIssue(reference)),
+    githubConcurrency.run(() => client.getRepository(reference)),
   ]);
   observeQuota(issueResponse.quota);
   observeQuota(repositoryResponse.quota);
@@ -406,12 +413,12 @@ async function buildReport(
 
   const [comments, commits, releases, readiness, timeline, pullRequests, historicalThreads] =
     await Promise.all([
-      optionalEvidence(() => client.listIssueComments(reference)),
-      optionalEvidence(() => client.listRecentCommits(reference)),
-      optionalEvidence(() => client.listRecentReleases(reference)),
-      optionalEvidence(() => client.getCommunityProfile(reference)),
-      optionalEvidence(() => client.listIssueTimeline(reference)),
-      optionalEvidence(() => client.listRecentPullRequests(reference)),
+      optionalEvidence(() => githubConcurrency.run(() => client.listIssueComments(reference))),
+      optionalEvidence(() => githubConcurrency.run(() => client.listRecentCommits(reference))),
+      optionalEvidence(() => githubConcurrency.run(() => client.listRecentReleases(reference))),
+      optionalEvidence(() => githubConcurrency.run(() => client.getCommunityProfile(reference))),
+      optionalEvidence(() => githubConcurrency.run(() => client.listIssueTimeline(reference))),
+      optionalEvidence(() => githubConcurrency.run(() => client.listRecentPullRequests(reference))),
       historicalResponsivenessThreads(reference, issue, client),
     ]);
 
@@ -580,10 +587,33 @@ export function createAnalysisService(options: AnalysisServiceOptions) {
     });
     recordMetric(cachedBeforeRequest === null ? "cache_miss" : "cache_hit", 1);
     structuredLog("info", "analysis_cache", { state: result.state, resource: key });
+    if (result.refresh) {
+      void result.refresh
+        .then((refresh) => {
+          if (refresh.status === "degraded") {
+            structuredLog("warn", "analysis_cache_refresh_degraded", {
+              resource: key,
+              retryAfterSeconds: refresh.retryAfterSeconds,
+            });
+          }
+        })
+        .catch((error: unknown) => {
+          structuredLog("warn", "analysis_cache_refresh_failed", {
+            resource: key,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+    }
     return result.state === "stale" ? { ...result.value, stale: true } : result.value;
   };
 }
 
 const token = process.env.GITHUB_TOKEN?.trim();
-const client = new GitHubClient(token ? { token } : {});
+const client = new GitHubClient({
+  ...(token ? { token } : {}),
+  onEvent(event) {
+    const level = event.type === "timeout" || event.type === "rate_limit" ? "warn" : "info";
+    structuredLog(level, `github_${event.type}`, { ...event });
+  },
+});
 export const analyzeIssue = createAnalysisService({ client });

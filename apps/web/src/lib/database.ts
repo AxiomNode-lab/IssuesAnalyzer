@@ -6,13 +6,28 @@ type Sql = ReturnType<typeof postgres>;
 
 let client: Sql | undefined;
 
+function boundedEnvInteger(
+  name: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const value = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isInteger(value) ? Math.min(maximum, Math.max(minimum, value)) : fallback;
+}
+
 function database(): Sql {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is not configured.");
   client ??= postgres(databaseUrl, {
-    max: 5,
-    idle_timeout: 20,
-    connect_timeout: 10,
+    max: boundedEnvInteger("DATABASE_POOL_MAX", 5, 1, 50),
+    idle_timeout: boundedEnvInteger("DATABASE_IDLE_TIMEOUT_SECONDS", 20, 1, 300),
+    connect_timeout: boundedEnvInteger("DATABASE_CONNECT_TIMEOUT_SECONDS", 10, 1, 30),
+    max_lifetime: boundedEnvInteger("DATABASE_MAX_LIFETIME_SECONDS", 60 * 30, 60, 60 * 60),
+    connection: {
+      statement_timeout: boundedEnvInteger("DATABASE_STATEMENT_TIMEOUT_MS", 8_000, 100, 60_000),
+      idle_in_transaction_session_timeout: 10_000,
+    },
     ssl: process.env.NODE_ENV === "production" ? "require" : false,
   });
   return client;
@@ -29,32 +44,38 @@ export async function upsertGithubUser(input: {
   avatarUrl?: string;
 }): Promise<SessionUser> {
   const sql = database();
-  const rows = await sql<{ id: string; github_user_id: number; github_login: string }[]>`
-    INSERT INTO users (github_user_id, github_login)
-    VALUES (${input.githubUserId}, ${input.login})
-    ON CONFLICT (github_user_id) DO UPDATE
-      SET github_login = EXCLUDED.github_login,
-          updated_at = now(),
-          deleted_at = NULL
-    RETURNING id, github_user_id, github_login
-  `;
-  const user = rows[0];
-  if (!user) throw new Error("Failed to persist GitHub user.");
+  return sql.begin(async (transaction) => {
+    const rows = await transaction<{ id: string; github_user_id: number; github_login: string }[]>`
+      INSERT INTO users (github_user_id, github_login)
+      VALUES (${input.githubUserId}, ${input.login})
+      ON CONFLICT (github_user_id) DO UPDATE
+        SET github_login = EXCLUDED.github_login,
+            updated_at = now(),
+            deleted_at = NULL
+      RETURNING id, github_user_id, github_login
+    `;
+    const user = rows[0];
+    if (!user) throw new Error("Failed to persist GitHub user.");
+    await transaction`
+      INSERT INTO profiles (user_id, avatar_url)
+      VALUES (${user.id}::uuid, ${input.avatarUrl ?? null})
+      ON CONFLICT (user_id) DO UPDATE
+        SET avatar_url = EXCLUDED.avatar_url,
+            updated_at = now()
+    `;
+    return {
+      userId: user.id,
+      githubUserId: Number(user.github_user_id),
+      login: user.github_login,
+      ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
+    };
+  });
+}
 
-  await sql`
-    INSERT INTO profiles (user_id, avatar_url)
-    VALUES (${user.id}::uuid, ${input.avatarUrl ?? null})
-    ON CONFLICT (user_id) DO UPDATE
-      SET avatar_url = EXCLUDED.avatar_url,
-          updated_at = now()
-  `;
-
-  return {
-    userId: user.id,
-    githubUserId: Number(user.github_user_id),
-    login: user.github_login,
-    ...(input.avatarUrl ? { avatarUrl: input.avatarUrl } : {}),
-  };
+export async function closeDatabase(): Promise<void> {
+  const current = client;
+  client = undefined;
+  if (current) await current.end({ timeout: 5 });
 }
 
 export async function listSavedOpportunities(userId: string) {

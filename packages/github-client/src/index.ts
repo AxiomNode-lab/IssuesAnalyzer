@@ -1,7 +1,8 @@
-export { GitHubClient, type GitHubClientOptions } from "./client";
+export { GitHubClient, type GitHubClientEvent, type GitHubClientOptions } from "./client";
 export { GitHubClientError, type GitHubClientErrorKind } from "./errors";
 export {
   EVIDENCE_CACHE_POLICIES,
+  ConcurrencyLimiter,
   FixedWindowRateLimiter,
   InFlightDeduplicator,
   MemoryStaleCache,

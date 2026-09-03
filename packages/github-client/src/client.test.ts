@@ -149,6 +149,37 @@ describe("GitHubClient", () => {
     });
   });
 
+  it("retries retryable failures with bounded exponential backoff and jitter", async () => {
+    const sleep = vi.fn(async () => undefined);
+    const events: unknown[] = [];
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response("{}", { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(issueFixture()), { status: 200 }));
+    const client = new GitHubClient({
+      fetch: fetchMock,
+      maxRetries: 1,
+      sleep,
+      random: () => 1,
+      onEvent: (event) => events.push(event),
+    });
+    await expect(client.getIssue(reference)).resolves.toMatchObject({ data: { number: 1347 } });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(300);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "retry", delayMs: 300, status: 503 }),
+    );
+  });
+
+  it("never retries permanent client failures", async () => {
+    const sleep = vi.fn(async () => undefined);
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("{}", { status: 404 }));
+    const client = new GitHubClient({ fetch: fetchMock, maxRetries: 2, sleep });
+    await expect(client.getIssue(reference)).rejects.toMatchObject({ kind: "not_found" });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
   it("bounds pagination and stops after the configured maximum", async () => {
     const fetchMock = vi
       .fn<typeof fetch>()

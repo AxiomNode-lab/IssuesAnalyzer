@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isProductionLike, runtimeConfig } from "./runtime-config";
+import { applicationOrigin, isProductionLike, runtimeConfig } from "./runtime-config";
 
 describe("runtimeConfig", () => {
   it("keeps staging and production explicit and distinct", () => {
@@ -17,5 +17,23 @@ describe("runtimeConfig", () => {
 
   it("rejects unsupported environments", () => {
     expect(() => runtimeConfig({ APP_ENV: "prod-ish" })).toThrow("Unsupported APP_ENV");
+  });
+
+  it("requires and validates a canonical HTTPS production origin", () => {
+    expect(() => applicationOrigin("https://proxy.example", { APP_ENV: "production" })).toThrow(
+      "APP_ORIGIN is required",
+    );
+    expect(() =>
+      applicationOrigin("https://proxy.example", {
+        APP_ENV: "production",
+        APP_ORIGIN: "https://user:pass@app.example",
+      }),
+    ).toThrow("canonical HTTPS origin");
+    expect(
+      applicationOrigin("http://localhost:3000", {
+        APP_ENV: "production",
+        APP_ORIGIN: "https://app.example",
+      }),
+    ).toBe("https://app.example");
   });
 });

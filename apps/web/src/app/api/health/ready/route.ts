@@ -6,6 +6,19 @@ import { runtimeConfig } from "../../../../lib/runtime-config";
 
 export async function GET() {
   const config = runtimeConfig();
+  if (!process.env.DATABASE_URL) {
+    return NextResponse.json(
+      {
+        status: "ready",
+        service: config.serviceName,
+        environment: config.environment,
+        release: config.release,
+        dependencies: { database: "not_configured" },
+      },
+      { status: 200 },
+    );
+  }
+  const required = process.env.REQUIRE_DATABASE === "true";
   try {
     await observeLatency("readiness.database", checkDatabaseReadiness);
     return NextResponse.json(
@@ -22,13 +35,13 @@ export async function GET() {
     reportOperationalError(error, { event: "readiness_failed", dependency: "database" });
     return NextResponse.json(
       {
-        status: "not_ready",
+        status: required ? "not_ready" : "degraded",
         service: config.serviceName,
         environment: config.environment,
         release: config.release,
         dependencies: { database: "unavailable" },
       },
-      { status: 503 },
+      { status: required ? 503 : 200 },
     );
   }
 }

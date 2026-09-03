@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: verify-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -61,39 +61,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Format changed source files
-        if: github.event_name == 'pull_request'
-        run: |
-          pnpm exec prettier --write \
-            apps/web/src/app/globals.css \
-            apps/web/src/app/page.tsx \
-            apps/web/src/components/analysis-report.tsx \
-            apps/web/src/components/issue-analyzer.tsx \
-            packages/actionability-analyzer/src/index.ts \
-            packages/competition-analyzer/src/index.ts \
-            packages/responsiveness-analyzer/src/index.ts \
-            packages/responsiveness-analyzer/src/index.test.ts
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add \
-              apps/web/src/app/globals.css \
-              apps/web/src/app/page.tsx \
-              apps/web/src/components/analysis-report.tsx \
-              apps/web/src/components/issue-analyzer.tsx \
-              packages/actionability-analyzer/src/index.ts \
-              packages/competition-analyzer/src/index.ts \
-              packages/responsiveness-analyzer/src/index.ts \
-              packages/responsiveness-analyzer/src/index.test.ts
-            git commit -m "style: apply repository formatting"
-            git push origin HEAD:${{ github.head_ref }}
-          fi
-
       - name: Verify formatting, lint, types, tests, and build
         run: pnpm verify
 
       - name: Validate operational scripts
-        run: sh -n scripts/smoke-test.sh scripts/backup-postgres.sh scripts/restore-postgres.sh
+        run: sh -n scripts/smoke-test.sh scripts/backup-postgres.sh scripts/restore-postgres.sh && pnpm security:check
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client

@@ -20,8 +20,14 @@ const MAX_ANALYSIS_BODY_BYTES = 4 * 1024;
 
 type AnalyzeBody = Readonly<{ issueUrl?: unknown }>;
 
-function errorResponse(status: number, message: string, retryAfterSeconds?: number | null) {
+function errorResponse(
+  status: number,
+  message: string,
+  retryAfterSeconds?: number | null,
+  requestId?: string,
+) {
   const headers = new Headers({ "Cache-Control": "no-store" });
+  if (requestId) headers.set("X-Request-Id", requestId);
   if (retryAfterSeconds !== undefined && retryAfterSeconds !== null) {
     headers.set("Retry-After", String(retryAfterSeconds));
   }
@@ -46,18 +52,26 @@ type Analyze = (issueUrl: string) => Promise<Awaited<ReturnType<typeof analyzeIs
 
 export function createAnalyzePostHandler(analyze: Analyze = analyzeIssue) {
   return async function post(request: NextRequest) {
+    const suppliedRequestId = request.headers.get("x-request-id");
+    const requestId =
+      suppliedRequestId && /^[A-Za-z0-9._-]{1,64}$/.test(suppliedRequestId)
+        ? suppliedRequestId
+        : crypto.randomUUID();
+    structuredLog("info", "analysis_started", { requestId });
     if (!assertSameOrigin(request))
       return errorResponse(403, "Cross-origin requests are not allowed.");
     if (request.headers.get("content-type")?.split(";", 1)[0]?.trim() !== "application/json") {
       return errorResponse(415, "Content-Type must be application/json.");
     }
 
-    const budget = consumeAbuseBudget(request);
+    const budget = await consumeAbuseBudget(request);
     if (!budget.allowed) {
+      structuredLog("warn", "rate_limit_rejected", { requestId, endpoint: "analyze" });
       return errorResponse(
         429,
         "Too many analysis requests. Please try again later.",
         budget.retryAfterSeconds,
+        requestId,
       );
     }
 
@@ -80,12 +94,16 @@ export function createAnalyzePostHandler(analyze: Analyze = analyzeIssue) {
       const report = await observeLatency("analysis_request", () => analyze(issueUrl));
       recordMetric("analysis_success", 1);
       structuredLog("info", "analysis_success", {
+        requestId,
         repository: report.repository,
         issueNumber: report.issueNumber,
         partial: report.partial,
         stale: report.stale,
       });
-      return NextResponse.json({ report }, { headers: { "Cache-Control": "no-store" } });
+      return NextResponse.json(
+        { report },
+        { headers: { "Cache-Control": "no-store", "X-Request-Id": requestId } },
+      );
     } catch (error) {
       recordMetric("analysis_failure", 1);
       if (error instanceof InvalidAnalysisInputError)
@@ -101,13 +119,17 @@ export function createAnalyzePostHandler(analyze: Analyze = analyzeIssue) {
             error.retryAfterSeconds,
           );
         }
-        reportOperationalError(error, { operation: "analyze_github_issue", kind: error.kind });
+        reportOperationalError(error, {
+          requestId,
+          operation: "analyze_github_issue",
+          kind: error.kind,
+        });
         return errorResponse(
           502,
           "GitHub evidence could not be collected safely. Please try again.",
         );
       }
-      reportOperationalError(error, { operation: "analyze_github_issue" });
+      reportOperationalError(error, { requestId, operation: "analyze_github_issue" });
       return errorResponse(500, "Analysis is temporarily unavailable.");
     }
   };

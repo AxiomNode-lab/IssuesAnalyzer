@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { GitHubClientError } from "./errors";
 import {
+  ConcurrencyLimiter,
   EVIDENCE_CACHE_POLICIES,
   FixedWindowRateLimiter,
   InFlightDeduplicator,
@@ -31,6 +32,18 @@ describe("MemoryStaleCache", () => {
     expect(EVIDENCE_CACHE_POLICIES.repository.staleMs).toBeGreaterThan(
       EVIDENCE_CACHE_POLICIES.repository.freshMs,
     );
+  });
+
+  it("evicts least-recently-used entries at the configured bound", () => {
+    const cache = new MemoryStaleCache(2);
+    const policy = { freshMs: 100, staleMs: 300 };
+    cache.set("one", 1, policy, 1_000);
+    cache.set("two", 2, policy, 1_000);
+    cache.get("one", 1_001);
+    cache.set("three", 3, policy, 1_001);
+    expect(cache.size).toBe(2);
+    expect(cache.get("two", 1_001)).toBeNull();
+    expect(cache.get("one", 1_001)?.value).toBe(1);
   });
 });
 
@@ -145,5 +158,32 @@ describe("FixedWindowRateLimiter", () => {
     expect(blocked.retryAfterSeconds).toBe(10);
     expect(limiter.consume("ip:203.0.113.5", 1_002).allowed).toBe(true);
     expect(limiter.consume("user:1", 11_000).allowed).toBe(true);
+  });
+
+  it("bounds attacker-controlled bucket cardinality", () => {
+    const limiter = new FixedWindowRateLimiter(2, 10_000, 2);
+    limiter.consume("one", 1_000);
+    limiter.consume("two", 1_000);
+    limiter.consume("three", 1_000);
+    expect(limiter.size).toBe(2);
+  });
+});
+
+describe("ConcurrencyLimiter", () => {
+  it("never exceeds its configured active-work bound", async () => {
+    const limiter = new ConcurrencyLimiter(2);
+    let active = 0;
+    let maximum = 0;
+    await Promise.all(
+      Array.from({ length: 8 }, () =>
+        limiter.run(async () => {
+          active += 1;
+          maximum = Math.max(maximum, active);
+          await Promise.resolve();
+          active -= 1;
+        }),
+      ),
+    );
+    expect(maximum).toBe(2);
   });
 });

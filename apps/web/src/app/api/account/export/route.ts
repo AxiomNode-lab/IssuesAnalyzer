@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     ? await decodeSession(request.cookies.get(SESSION_COOKIE)?.value, secret)
     : null;
   if (!session) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
-  const limit = consumeAbuseBudget(request, session.user.userId);
+  const limit = await consumeAbuseBudget(request, session.user.userId);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many requests." },

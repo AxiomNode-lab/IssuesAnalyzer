@@ -15,9 +15,11 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "load:test": "node scripts/load-test.mjs",
+    "security:check": "node scripts/check-server-boundaries.mjs",
     "test": "vitest run --passWithNoTests",
     "typecheck": "pnpm -r --if-present run typecheck",
-    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm security:check && pnpm build"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
