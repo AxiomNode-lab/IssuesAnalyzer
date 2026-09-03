@@ -141,7 +141,8 @@ const EVIDENCE_ADJUSTMENTS: readonly AppliedScoreAdjustment[] = [
     key: "heavy_unresolved_discussion",
     points: -12,
     evidenceKeys: ["competition.heavyDiscussion"],
-    reason: "The thread has substantial unresolved discussion rather than a clean implementation path.",
+    reason:
+      "The thread has substantial unresolved discussion rather than a clean implementation path.",
   },
   {
     key: "trivial_low_value_contribution",
@@ -236,7 +237,8 @@ function decisionReason(
   if (activity.rawScore < 50 && responsiveness.confidence.level === "low") {
     return "The issue appears actionable, but repository activity is weak and maintainer-response evidence is limited.";
   }
-  if (activity.rawScore < 50) return "The issue appears actionable, but repository activity is weak or stale.";
+  if (activity.rawScore < 50)
+    return "The issue appears actionable, but repository activity is weak or stale.";
   if (responsiveness.confidence.level === "low") {
     return "The issue appears actionable, but maintainer-response evidence is limited; treat the score with lower confidence.";
   }
@@ -292,7 +294,8 @@ export function calculateOpportunityScore(input: OpportunityScoreInput): Opportu
     0,
     Math.min(
       100,
-      calibratedScore + adjustmentsApplied.reduce((total, adjustment) => total + adjustment.points, 0),
+      calibratedScore +
+        adjustmentsApplied.reduce((total, adjustment) => total + adjustment.points, 0),
     ),
   );
   const overallConfidence = Math.round(
