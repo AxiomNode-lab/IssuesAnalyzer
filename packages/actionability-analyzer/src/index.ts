@@ -104,7 +104,8 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
   const proposalStyle = !acceptedDirection && PROPOSAL_STYLE.test(text);
   const trivialContribution = TRIVIAL_CONTRIBUTION.test(text);
   const unresolvedMaintainerDecision =
-    !acceptedDirection && (unresolvedDirection || (proposalStyle && !acceptanceCriteria && !reproduction));
+    !acceptedDirection &&
+    (unresolvedDirection || (proposalStyle && !acceptanceCriteria && !reproduction));
   const moderateScope = MODERATE_SCOPE.test(text);
   const migrationScope = MIGRATION_SCOPE.test(text);
   const dependencyScope = DEPENDENCY_SCOPE.test(text);
