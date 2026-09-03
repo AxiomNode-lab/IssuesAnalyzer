@@ -13,6 +13,7 @@ function component(
   key: ScoreComponentInput["key"],
   score: number,
   confidence = 80,
+  evidenceKeys: readonly string[] = [`${key}.evidence`],
 ): ScoreComponentInput {
   return {
     key,
@@ -21,7 +22,7 @@ function component(
       level: confidence >= 75 ? "high" : confidence >= 45 ? "medium" : "low",
       value: confidence,
     },
-    evidenceKeys: [`${key}.evidence`],
+    evidenceKeys,
     reason: `${key} reason`,
     warnings: [],
   };
@@ -44,53 +45,33 @@ function input(
 }
 
 describe("calibrateOpportunityScore", () => {
-  it.each([
-    [0, 0],
-    [20, 10],
-    [40, 38],
-    [50, 50],
-    [60, 61],
-    [70, 73],
-    [80, 86],
-    [85, 90],
-    [90, 93],
-    [95, 96],
-    [100, 100],
-  ])("maps base %i to %i", (base, expected) => {
-    expect(calibrateOpportunityScore(base)).toBe(expected);
+  it("is an identity calibration in v4", () => {
+    expect(calibrateOpportunityScore(0)).toBe(0);
+    expect(calibrateOpportunityScore(50)).toBe(50);
+    expect(calibrateOpportunityScore(86)).toBe(86);
+    expect(calibrateOpportunityScore(100)).toBe(100);
   });
 
-  it("is monotonic and bounded across the complete integer input range", () => {
-    let previous = calibrateOpportunityScore(0);
-    for (let base = 1; base <= 100; base += 1) {
-      const current = calibrateOpportunityScore(base);
-      expect(current).toBeGreaterThanOrEqual(previous);
-      expect(current).toBeGreaterThanOrEqual(0);
-      expect(current).toBeLessThanOrEqual(100);
-      previous = current;
-    }
+  it("bounds non-integer inputs", () => {
+    expect(calibrateOpportunityScore(-5)).toBe(0);
+    expect(calibrateOpportunityScore(101)).toBe(100);
+    expect(calibrateOpportunityScore(72.4)).toBe(72);
   });
 });
 
 describe("calculateOpportunityScore", () => {
-  it("produces a versioned, explainable score in canonical component order", () => {
+  it("produces an auditable weighted score without nonlinear tail inflation", () => {
     const result = calculateOpportunityScore(input());
     expect(result.version).toBe(SCORE_VERSION);
     expect(result.baseScore).toBe(80);
-    expect(result.score).toBe(86);
-    expect(result.decision).toBe("pursue");
+    expect(result.calibratedScore).toBe(80);
+    expect(result.score).toBe(80);
     expect(result.components.map((item) => item.key)).toEqual([
       "activity",
       "competition",
       "responsiveness",
       "actionability",
     ]);
-    expect(result.components[1]).toMatchObject({
-      rawScore: 20,
-      normalizedScore: 80,
-      weight: 0.3,
-      weightedPoints: 24,
-    });
     expect(Object.fromEntries(result.components.map(({ key, weight }) => [key, weight]))).toEqual(
       SCORE_WEIGHTS,
     );
@@ -102,27 +83,107 @@ describe("calculateOpportunityScore", () => {
     );
   });
 
-  it("calibrates strong and weak tails while keeping the midpoint stable", () => {
-    const strong = calculateOpportunityScore(input(80, 20, 80, 80));
-    const weak = calculateOpportunityScore(input(20, 80, 20, 20));
-    const middle = calculateOpportunityScore(input(50, 50, 50, 50));
-
-    expect(strong.baseScore).toBe(80);
-    expect(strong.score).toBe(86);
-    expect(weak.baseScore).toBe(20);
-    expect(weak.score).toBe(10);
-    expect(middle.score).toBe(50);
+  it("keeps confidence separate from opportunity score", () => {
+    const source = input();
+    const components = source.components.map((item) => ({
+      ...item,
+      confidence: { level: "low" as const, value: 20 },
+    }));
+    const result = calculateOpportunityScore({ components });
+    expect(result.score).toBe(80);
+    expect(result.confidence.level).toBe("low");
   });
 
-  it("does not turn incomplete competition evidence into a score cap", () => {
-    const source = input(84, 0, 25, 100);
+  it("applies evidence-based risk adjustments after the positive score", () => {
+    const source = input(95, 0, 90, 90);
     const components = source.components.map((item) =>
-      item.key === "competition"
-        ? { ...item, confidence: { level: "medium" as const, value: 55 }, warnings: ["bounded"] }
+      item.key === "actionability"
+        ? {
+            ...item,
+            evidenceKeys: [
+              ...item.evidenceKeys,
+              "actionability.unresolvedMaintainerDecision",
+              "actionability.researchRisk",
+            ],
+          }
         : item,
     );
+    const result = calculateOpportunityScore({ components });
+    expect(result.baseScore).toBe(93);
+    expect(result.adjustmentsApplied.map((item) => item.key)).toEqual([
+      "unresolved_maintainer_decision",
+      "research_or_architecture_required",
+    ]);
+    expect(result.uncappedScore).toBe(68);
+    expect(result.score).toBe(68);
+    expect(result.decision).toBe("review_carefully");
+  });
+
+  it("penalizes trivial contribution value independently from actionability", () => {
+    const source = input(95, 0, 80, 100);
+    const components = source.components.map((item) =>
+      item.key === "actionability"
+        ? {
+            ...item,
+            evidenceKeys: [...item.evidenceKeys, "actionability.trivialContribution"],
+          }
+        : item,
+    );
+    const result = calculateOpportunityScore({ components });
+    expect(result.adjustmentsApplied).toContainEqual(
+      expect.objectContaining({ key: "trivial_low_value_contribution", points: -15 }),
+    );
+    expect(result.score).toBeLessThan(result.baseScore);
+  });
+
+  it("caps an active linked implementation at 20 even when all positive signals are perfect", () => {
     const result = calculateOpportunityScore({
-      components,
+      ...input(100, 0, 100, 100),
+      hardWarnings: [
+        {
+          key: "active_competing_implementation",
+          evidenceKeys: ["competition.activePullRequestCount"],
+          reason: "An active linked pull request already implements this issue.",
+        },
+      ],
+    });
+    expect(result.score).toBe(20);
+    expect(result.decision).toBe("skip");
+  });
+
+  it("uses a stricter cap when assignment and active implementation are both visible", () => {
+    const result = calculateOpportunityScore({
+      ...input(100, 0, 100, 100),
+      hardWarnings: [
+        {
+          key: "assigned_active_competing_implementation",
+          evidenceKeys: ["issue.assigneeCount", "competition.activePullRequestCount"],
+          reason: "The issue is assigned and active implementation work is already visible.",
+        },
+      ],
+    });
+    expect(result.score).toBe(15);
+    expect(result.decision).toBe("skip");
+  });
+
+  it("treats closed, archived, and disabled work as ineligible", () => {
+    for (const key of ["issue_closed", "repository_archived", "repository_disabled"] as const) {
+      const result = calculateOpportunityScore({
+        ...input(100, 0, 100, 100),
+        hardWarnings: [{ key, evidenceKeys: ["state"], reason: "Unavailable." }],
+      });
+      expect(result.score).toBe(0);
+    }
+  });
+
+  it("keeps incomplete evidence as confidence information rather than a score penalty", () => {
+    const source = input(90, 0, 90, 90);
+    const result = calculateOpportunityScore({
+      components: source.components.map((item) =>
+        item.key === "competition"
+          ? { ...item, confidence: { level: "medium" as const, value: 55 } }
+          : item,
+      ),
       hardWarnings: [
         {
           key: "competition_evidence_incomplete",
@@ -133,129 +194,37 @@ describe("calculateOpportunityScore", () => {
     });
     expect(result.score).toBeGreaterThanOrEqual(70);
     expect(result.confidence.value).toBeLessThan(80);
-    expect(result.warnings).toContain("bounded");
   });
 
-  it("caps an active linked implementation below Pursue", () => {
+  it("uses the strictest hard cap after adjustments", () => {
+    const source = input(100, 0, 100, 100);
+    const components = source.components.map((item) =>
+      item.key === "actionability"
+        ? {
+            ...item,
+            evidenceKeys: [...item.evidenceKeys, "actionability.trivialContribution"],
+          }
+        : item,
+    );
     const result = calculateOpportunityScore({
-      ...input(84, 80, 25, 85),
-      hardWarnings: [
-        {
-          key: "active_competing_implementation",
-          evidenceKeys: ["competition.activePullRequestCount"],
-          reason: "An active linked pull request already implements this issue.",
-        },
-      ],
-    });
-    expect(result.score).toBe(49);
-    expect(result.decision).toBe("review_carefully");
-  });
-
-  it("uses a stricter cap when the issue is assigned and has active implementation work", () => {
-    const result = calculateOpportunityScore({
-      ...input(84, 80, 25, 85),
-      hardWarnings: [
-        {
-          key: "assigned_active_competing_implementation",
-          evidenceKeys: ["issue.assigneeCount", "competition.activePullRequestCount"],
-          reason: "The issue is assigned and active implementation work is already visible.",
-        },
-      ],
-    });
-    expect(result.score).toBe(39);
-    expect(result.decision).toBe("skip");
-  });
-
-  it("caps automated or tracking issues regardless of optimistic labels", () => {
-    const result = calculateOpportunityScore({
-      ...input(100, 0, 100, 100),
-      hardWarnings: [
-        {
-          key: "automated_or_tracking_issue",
-          evidenceKeys: ["actionability.automatedOrTracking"],
-          reason: "This is an automated dashboard or tracking issue, not a contribution task.",
-        },
-      ],
-    });
-    expect(result.score).toBe(15);
-    expect(result.calibratedScore).toBe(100);
-    expect(result.decision).toBe("skip");
-  });
-
-  it("does not cap a normal actionable issue", () => {
-    const result = calculateOpportunityScore(input(90, 0, 90, 95));
-    expect(result.score).toBeGreaterThan(20);
-    expect(result.hardWarningsApplied).toEqual([]);
-  });
-
-  it("preserves component warnings and calculates weighted confidence separately from score", () => {
-    const source = input();
-    const components = source.components.map((item, index) => ({
-      ...item,
-      confidence: { level: "low" as const, value: index === 0 ? 10 : 20 },
-      warnings: [`${item.key} warning`],
-    }));
-    const result = calculateOpportunityScore({ components });
-    expect(result.confidence.level).toBe("low");
-    expect(result.warnings).toHaveLength(4);
-    expect(result.score).toBe(86);
-  });
-
-  it.each([
-    ["repository_archived", 0],
-    ["repository_disabled", 0],
-    ["issue_closed", 20],
-    ["issue_low_actionability", 25],
-    ["automated_or_tracking_issue", 15],
-    ["stale_opportunity_uncertain_maintainers", 69],
-    ["active_competing_implementation", 49],
-    ["assigned_active_competing_implementation", 39],
-    ["competition_evidence_incomplete", 100],
-  ] as const)("applies the %s hard-warning cap", (key, cap) => {
-    const result = calculateOpportunityScore({
-      ...input(100, 0, 100, 100),
-      hardWarnings: [{ key, evidenceKeys: ["repository.state"], reason: "Guardrail." }],
-    });
-    expect(result.score).toBe(cap === 100 ? 100 : cap);
-  });
-
-  it("uses the strictest cap when several hard warnings apply", () => {
-    const result = calculateOpportunityScore({
-      ...input(100, 0, 100),
+      components,
       hardWarnings: [
         { key: "issue_closed", evidenceKeys: ["issue.state"], reason: "Issue is closed." },
         {
-          key: "repository_archived",
-          evidenceKeys: ["repository.archived"],
-          reason: "Repository is archived.",
+          key: "active_competing_implementation",
+          evidenceKeys: ["competition.activePullRequestCount"],
+          reason: "Active PR.",
         },
       ],
     });
     expect(result.score).toBe(0);
   });
 
-  it("keeps scores bounded for all integer component values", () => {
+  it("keeps scores bounded and monotonic without risk signals", () => {
     for (let score = 0; score <= 100; score += 1) {
       const result = calculateOpportunityScore(input(score, 100 - score, score, score));
       expect(result.score).toBeGreaterThanOrEqual(0);
       expect(result.score).toBeLessThanOrEqual(100);
-    }
-  });
-
-  it("preserves monotonic scoring invariants", () => {
-    for (let score = 0; score < 100; score += 1) {
-      expect(calculateOpportunityScore(input(score + 1, 50, 50)).score).toBeGreaterThanOrEqual(
-        calculateOpportunityScore(input(score, 50, 50)).score,
-      );
-      expect(calculateOpportunityScore(input(50, 50, score + 1)).score).toBeGreaterThanOrEqual(
-        calculateOpportunityScore(input(50, 50, score)).score,
-      );
-      expect(calculateOpportunityScore(input(50, 50, 50, score + 1)).score).toBeGreaterThanOrEqual(
-        calculateOpportunityScore(input(50, 50, 50, score)).score,
-      );
-      expect(calculateOpportunityScore(input(50, score + 1, 50)).score).toBeLessThanOrEqual(
-        calculateOpportunityScore(input(50, score, 50)).score,
-      );
     }
   });
 

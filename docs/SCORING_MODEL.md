@@ -1,72 +1,117 @@
 # Scoring model
 
-The Opportunity Score is deterministic decision support, never a guarantee.
+The Opportunity Score answers one question: **how good is this issue as an opportunity for a new contributor right now?** It is deterministic decision support, never a guarantee of response, acceptance, payment, or completion time.
 
 ## Current version
 
-`opportunity-score-v3` combines four analyzer outputs:
+`opportunity-score-v4` uses an evidence-first hybrid model with three separate layers:
 
-| Component | Weight | Meaning |
-| --- | ---: | --- |
-| Repository activity | 20% | Recent public activity and contribution-readiness evidence |
-| Visible competition | 30% | Assignees, claims, and linked implementation work; converted from risk to contributor availability before weighting |
-| Maintainer responsiveness | 15% | Bounded historical response observations |
-| Issue actionability | 35% | Whether the issue currently defines contribution-ready work |
+1. a positive opportunity score,
+2. explicit evidence-backed risk adjustments,
+3. hard eligibility/collision caps.
 
-The weighting intentionally gives more influence to whether work is still available and whether the issue is actually implementable. Maintainer responsiveness remains useful, but its bounded historical sampling has less power to drag an otherwise strong opportunity toward the middle.
+Confidence remains separate from the opportunity score.
 
-## Tail calibration
+## Positive opportunity score
 
-V2 tended to compress both excellent and poor opportunities toward the middle. V3 computes a normal weighted base score and applies monotonic piecewise-linear calibration. Anchors preserve the useful middle range while slopes diminish near the high end: base scores of 20, 50, 80, 90, and 95 calibrate to 10, 50, 86, 93, and 96 respectively. The result is rounded and bounded to 0–100.
+The existing analyzers remain the source of observable evidence, but v4 changes their influence so that implementation readiness has the largest share and optimistic repository signals cannot dominate a weak task.
+
+| Component | Weight | Direction | Meaning |
+| --- | ---: | --- | --- |
+| Issue actionability | 50% | higher is better | Is the issue sufficiently concrete and implementation-ready? |
+| Visible competition | 25% | lower raw risk is better | Assignees, contributor claims, and linked implementation work |
+| Repository activity | 15% | higher is better | Is the repository alive and contribution-ready? |
+| Maintainer responsiveness | 10% | higher is better | What does observed historical maintainer response evidence show? |
+
+The competition analyzer remains a risk score (`100 = more competition`). The scoring engine converts it to availability (`100 - competition risk`) before weighting.
+
+The v4 base score is the rounded weighted total. There is **no nonlinear high-tail calibration**. This intentionally removes the previous behavior where already-strong scores could be inflated into the 90s.
+
+## Risk adjustments
+
+Positive evidence is not allowed to hide material execution risk. After the base score is calculated, v4 applies bounded deductions only when a corresponding evidence key was actually observed.
+
+| Evidence-backed risk | Adjustment |
+| --- | ---: |
+| Maintainer decision still required | -15 |
+| Unresolved prerequisite/dependency | -15 |
+| Research, architecture, or unresolved design required | -10 |
+| Migration or backfill | -8 |
+| Large/cross-cutting implementation | -10 |
+| Heavy unresolved discussion | -12 |
+| Trivial/copy-paste contribution with low contribution value | -15 |
+
+These adjustments are additive but the final score remains bounded to 0–100.
+
+The actionability analyzer now emits conditional evidence keys for unresolved maintainer decisions, dependency risk, research/architecture risk, migration risk, large-scope risk, and unusually trivial contributions. Conditional facts are emitted only when the signal is present, so absence of evidence is not interpreted as negative evidence.
+
+## Hard gates and caps
+
+Some states are not ordinary risk and therefore are not represented as small point deductions.
+
+| Condition | Maximum final score |
+| --- | ---: |
+| Repository archived | 0 |
+| Repository disabled | 0 |
+| Issue closed | 0 |
+| Active linked implementation already exists | 20 |
+| Issue assigned **and** active linked implementation exists | 15 |
+| Automated/non-standalone tracker | 15 |
+| High-confidence low-actionability issue | 35 |
+| Very stale repository + insufficient maintainer evidence | 69 |
+| Competition evidence incomplete | no score cap; confidence only |
+
+This is the main protection against score compensation. A healthy repository, `good first issue` label, or clear description cannot raise an issue with active competing implementation above the collision cap.
 
 ## Confidence is separate from score
 
-Confidence measures evidence completeness; it is not a hidden penalty on opportunity quality. Missing or bounded evidence lowers confidence and creates warnings, but it does not automatically cap a strong score. In particular, reaching the pull-request or timeline collection bound no longer forces a score of 69.
+Confidence measures the completeness and quality of public evidence. It does not answer whether the opportunity itself is good.
 
-Competition analyzer output remains a risk score for backwards-compatible explainability (`100 = more visible competition`). Before weighting, the scoring engine converts it to contributor availability (`100 - competition risk`). This keeps every weighted dimension pointed in the same direction without changing the analyzer contract.
+Missing or bounded evidence lowers confidence and can produce warnings, but it does not silently become a negative score. For example, insufficient maintainer-response history is treated as uncertainty rather than proof that maintainers are slow.
 
-## Verdicts and guardrails
+## Labels are weak evidence
 
-- 70–100: `Pursue`
-- 40–69: `Review Carefully`
-- 0–39: `Skip`
+Labels such as `good first issue`, `help wanted`, and `easy to fix` are useful but weak signals. They cannot override assignment, active pull requests, unresolved decisions, dependency blockers, or low contribution value.
 
-Evidence-backed caps still override an optimistic calibrated result:
+This prevents a repository from receiving very high opportunity scores simply because it creates many beginner-labelled microtasks.
 
-- archived or disabled repository: 0
-- closed issue: 20
-- high-confidence low-actionability issue: 25
-- automated or non-standalone tracking issue: 15
-- active linked implementation: 49
-- assigned issue plus active linked implementation: 39
-- very stale repository plus insufficient maintainer evidence: 69
+## Contribution value vs ease
 
-Incomplete competition evidence has a cap of 100, which means it affects confidence/warnings only.
+V4 explicitly distinguishes an easy task from a valuable contribution opportunity. A task can be perfectly actionable and still receive a contribution-value deduction when the issue itself describes work as effectively copy/paste, browser-only, requiring no setup/code, or taking less than about a minute.
 
-## Automated dashboards, roadmaps, and trackers
+This signal is deliberately narrow. It is not meant to penalize small legitimate fixes; it targets unusually trivial contribution tasks where `easy` should not automatically mean `strong opportunity`.
 
-Actionability v2 detects issues that are not standalone contribution tasks even when they contain optimistic labels or checklists. Strong signals include titles/body text such as `Dependency Dashboard`, `Public Roadmap`, explicit tracking/umbrella language, Renovate-generated dependency output, and labels such as `automated`, `bot`, or `renovate`.
+## Actionability evidence
 
-These cases are capped to low actionability before final scoring. This prevents an automated dependency dashboard from receiving a high score simply because the repository is active or the issue contains generated checkboxes and `good first issue` labels.
+Actionability uses observable issue title, body, and labels. Positive signals include concrete requested behavior, reproduction details, expected outcomes/checklists, specific code targets, contribution-ready labels, and accepted implementation direction.
 
-## Visible competition
+Negative or risk signals include open-ended implementation decisions, proposal-style requests without acceptance criteria, multiple unresolved approaches, tracking/umbrella language, automated dependency-management output, migrations/backfills, prerequisites, research/architecture requirements, and broad cross-cutting scope.
 
-Active competition means an open or draft PR that GitHub exposes as a timeline cross-reference, or a repository PR whose title/body explicitly references the issue. Duplicates are removed by URL. Merged and closed-unmerged PRs are retained as weaker historical evidence. Generic issue, commit, documentation, and repository references do not become PR competition.
+## Competition evidence
 
-Collection is bounded. A full timeline page or full recent-PR window signals possible truncation and lowers confidence. “No active PR detected” never means that nobody is working privately.
+Active competition means an open or draft pull request linked through GitHub timeline evidence or an explicitly referencing repository pull request. Assignment is also strong competition evidence. Contributor claim language is weaker and is scored below an assignee or active PR.
 
-## Maintainer responsiveness
+Closed/merged work remains historical evidence. Generic issue references do not automatically become competing implementation.
 
-The application samples up to 15 recent issue threads, excluding the issue currently being analyzed. Only `OWNER`, `MEMBER`, and `COLLABORATOR` author associations count as observable maintainer responses, and bots do not count. Because this evidence can be sparse or imperfect, its weight is 15% in v3 rather than 20%.
+## Decision bands
 
-## Issue actionability
+- `70–100`: Pursue
+- `40–69`: Review Carefully
+- `0–39`: Skip
 
-Actionability uses only observable issue title, body, and labels. Positive signals include concrete requested behavior, reproduction details, expected outcomes/checklists, specific code targets, contribution-ready labels, and accepted implementation direction. Negative signals include discussion/meta/question labels, multiple unresolved proposals, open-ended direction requests, tracking/umbrella language, roadmaps, automated dependency-management output, and evidence of multi-component, migration, architecture, dependency, security-sensitive, or research-heavy scope. Complexity is a bounded adjustment: it distinguishes equally clear tasks without automatically rejecting database or security work.
+The band is applied only after evidence adjustments and hard caps.
 
-Labels are not absolute rules. Generated or automated issue structure is explicitly prevented from masquerading as a high-quality contribution task.
+## Benchmark-driven calibration
 
-## Confidence and limitations
+V4 should be calibrated against a human-reviewed benchmark set rather than individual anecdotal examples. When a benchmark differs from the application result, diagnosis should identify whether the error came from:
 
-Confidence measures completeness and strength of available public evidence, not certainty about the future. Private forks, unpushed work, private discussion, and activity beyond collection bounds are invisible.
+- missing/incorrect GitHub evidence collection,
+- feature classification,
+- feature weight,
+- risk adjustment,
+- hard-cap logic,
+- or confidence estimation.
 
-Weights, calibration strength, lexical rules, thresholds, and guardrails should continue to be tested against a human-reviewed benchmark set. Stored reports retain their score version so future scoring changes remain explicit.
+The model should not receive one-off issue-specific patches. New rules must represent a general observable pattern and must be covered by tests.
+
+Stored reports keep their score version so future score changes remain explicit.
