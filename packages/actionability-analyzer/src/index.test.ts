@@ -182,7 +182,7 @@ This requires a database migration and backfill across multiple services and is 
       expect.objectContaining({ key: "actionability.complexityPenalty", value: 0 }),
     );
     expect(complex.facts).toContainEqual(
-      expect.objectContaining({ key: "actionability.complexityPenalty", value: 22 }),
+      expect.objectContaining({ key: "actionability.complexityPenalty", value: 35 }),
     );
     expect(complex.warnings.join(" ")).toContain("Implementation scope reduces actionability");
   });

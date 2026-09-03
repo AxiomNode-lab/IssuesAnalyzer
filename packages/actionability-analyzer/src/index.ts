@@ -10,7 +10,6 @@ export type ActionabilityInput = Readonly<{
     canonicalUrl: string;
   }>;
 }>;
-
 export type ActionabilityFact = Readonly<{
   key: string;
   value: string | number | boolean | null;
@@ -18,14 +17,12 @@ export type ActionabilityFact = Readonly<{
   observedAt: Date;
   freshnessDays: number;
 }>;
-
 export type ActionabilityInference = Readonly<{
   key: string;
   value: string | number | boolean;
   basisFactKeys: readonly string[];
   caution: string;
 }>;
-
 export type ActionabilityResult = Readonly<{
   version: "actionability-v2";
   status: ActionabilityStatus;
@@ -63,8 +60,14 @@ const ALTERNATIVE_CONTEXT =
   /\b(?:possible approaches?|approaches worth considering|options? include)\b/i;
 const MODERATE_SCOPE =
   /\b(?:multiple files?|multi-file|several (?:files?|components?|modules?)|across (?:the )?(?:codebase|stack)|frontend and backend|client and server|end[- ]to[- ]end)\b/i;
-const HIGH_RISK_SCOPE =
-  /\b(?:database migration|schema migration|data migration|backfill|security-sensitive|authentication|authorization|architecture change|architectural|breaking change|external research|research required|blocked by|depends on|dependency on|unresolved design|cross-cutting)\b/i;
+const MIGRATION_SCOPE =
+  /\b(?:database migration|schema migration|data migration|backfill|migrate existing|existing rows?|existing records?)\b/i;
+const DEPENDENCY_SCOPE =
+  /\b(?:blocked by|depends on|dependency on|prerequisite|after #\d+|requires #\d+)\b/i;
+const SECURITY_SCOPE =
+  /\b(?:security-sensitive|authentication|authorization|credential|token leak|privilege|permission)\b/i;
+const RESEARCH_SCOPE =
+  /\b(?:external research|research required|unresolved design|architecture change|architectural|breaking change|cross-cutting)\b/i;
 const LARGE_IMPLEMENTATION =
   /\b(?:large implementation|multi-step implementation|phased rollout|multiple services|several packages|many components)\b/i;
 
@@ -79,7 +82,6 @@ function confidence(signalCount: number, bodyAvailable: boolean) {
 export function analyzeIssueActionability(input: ActionabilityInput): ActionabilityResult {
   if (Number.isNaN(input.asOf.getTime())) throw new TypeError("Invalid asOf date.");
   if (input.issue.title.trim().length === 0) throw new TypeError("Issue title must not be empty.");
-
   const labels = input.issue.labels.map((label) => label.trim()).filter(Boolean);
   const body = input.issue.body ?? "";
   const text = `${input.issue.title}\n${body}`;
@@ -99,11 +101,21 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
   const automatedOrTracking = automatedIssue || (trackingIssue && !independentlyActionable);
   const proposalStyle = !acceptedDirection && PROPOSAL_STYLE.test(text);
   const moderateScope = MODERATE_SCOPE.test(text);
-  const highRiskScope = HIGH_RISK_SCOPE.test(text);
+  const migrationScope = MIGRATION_SCOPE.test(text);
+  const dependencyScope = DEPENDENCY_SCOPE.test(text);
+  const securityScope = SECURITY_SCOPE.test(text);
+  const researchScope = RESEARCH_SCOPE.test(text);
   const largeImplementation = LARGE_IMPLEMENTATION.test(text);
+  // Scope risk is additive: a migration that also depends on prerequisite work is
+  // materially riskier than a clearly specified single-file security fix.
   const complexityPenalty = Math.min(
-    25,
-    (moderateScope ? 8 : 0) + (highRiskScope ? 12 : 0) + (largeImplementation ? 10 : 0),
+    35,
+    (moderateScope ? 6 : 0) +
+      (migrationScope ? 16 : 0) +
+      (dependencyScope ? 10 : 0) +
+      (securityScope ? 6 : 0) +
+      (researchScope ? 12 : 0) +
+      (largeImplementation ? 10 : 0),
   );
   const headingAlternativeCount = [...body.matchAll(HEADING_ALTERNATIVE)].length;
   const numberedAlternativeCount = ALTERNATIVE_CONTEXT.test(body)
@@ -132,99 +144,41 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
   score = Math.min(100, Math.max(0, score));
   if (automatedOrTracking) score = Math.min(score, 20);
 
+  const scopeRisk =
+    complexityPenalty === 0
+      ? "self-contained"
+      : migrationScope && dependencyScope
+        ? "migration with prerequisite dependencies"
+        : migrationScope
+          ? "migration or data-backfill risk"
+          : dependencyScope
+            ? "dependency-sensitive"
+            : researchScope || largeImplementation
+              ? "complex or cross-cutting"
+              : securityScope
+                ? "security-sensitive"
+                : "moderate multi-component scope";
+  const fact = (key: string, value: string | number | boolean | null): ActionabilityFact => ({
+    key,
+    value,
+    sourceUrl: input.issue.canonicalUrl,
+    observedAt: input.asOf,
+    freshnessDays: 0,
+  });
   const facts: ActionabilityFact[] = [
-    {
-      key: "actionability.labels",
-      value: labels.length === 0 ? "None" : labels.join(", "),
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
-    {
-      key: "actionability.discussionLabelCount",
-      value: discussionLabels.length,
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
-    {
-      key: "actionability.alternativeCount",
-      value: alternativeCount,
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
-    {
-      key: "actionability.acceptedDirection",
-      value: acceptedDirection,
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
-    {
-      key: "actionability.acceptanceCriteria",
-      value: acceptanceCriteria,
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
-    {
-      key: "actionability.concreteRequest",
-      value: concreteRequest,
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
-    {
-      key: "actionability.trackingIssue",
-      value: trackingIssue,
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
-    {
-      key: "actionability.automatedIssue",
-      value: automatedIssue,
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
-    {
-      key: "actionability.automatedOrTracking",
-      value: automatedOrTracking,
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
-    {
-      key: "actionability.complexityPenalty",
-      value: complexityPenalty,
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
-    {
-      key: "actionability.scopeRisk",
-      value:
-        complexityPenalty === 0
-          ? "self-contained"
-          : highRiskScope || largeImplementation
-            ? "complex or dependency-sensitive"
-            : "moderate multi-component scope",
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
-    {
-      key: "actionability.proposalStyle",
-      value: proposalStyle,
-      sourceUrl: input.issue.canonicalUrl,
-      observedAt: input.asOf,
-      freshnessDays: 0,
-    },
+    fact("actionability.labels", labels.length === 0 ? "None" : labels.join(", ")),
+    fact("actionability.discussionLabelCount", discussionLabels.length),
+    fact("actionability.alternativeCount", alternativeCount),
+    fact("actionability.acceptedDirection", acceptedDirection),
+    fact("actionability.acceptanceCriteria", acceptanceCriteria),
+    fact("actionability.concreteRequest", concreteRequest),
+    fact("actionability.trackingIssue", trackingIssue),
+    fact("actionability.automatedIssue", automatedIssue),
+    fact("actionability.automatedOrTracking", automatedOrTracking),
+    fact("actionability.complexityPenalty", complexityPenalty),
+    fact("actionability.scopeRisk", scopeRisk),
+    fact("actionability.proposalStyle", proposalStyle),
   ];
-
-  const basisFactKeys = facts.map((fact) => fact.key);
   const status: ActionabilityStatus = score >= 70 ? "high" : score >= 40 ? "medium" : "low";
   const signalCount = [
     positiveLabels.length > 0,
@@ -241,40 +195,33 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
     automatedIssue,
     proposalStyle,
     moderateScope,
-    highRiskScope,
+    migrationScope,
+    dependencyScope,
+    securityScope,
+    researchScope,
     largeImplementation,
   ].filter(Boolean).length;
   const warnings: string[] = [];
-
-  if (input.issue.body === null || body.trim().length === 0) {
+  if (input.issue.body === null || body.trim().length === 0)
     warnings.push("Issue description is unavailable, so actionability is uncertain.");
-  }
-  if (signalCount === 0) {
+  if (signalCount === 0)
     warnings.push("No strong contribution-readiness or discussion signals were detected.");
-  }
-  if (proposalStyle && !acceptanceCriteria && !reproduction) {
+  if (proposalStyle && !acceptanceCriteria && !reproduction)
     warnings.push(
       "The issue reads like a proposal or coordination item without concrete acceptance or reproduction evidence.",
     );
-  }
-  if (complexityPenalty > 0) {
+  if (complexityPenalty > 0)
     warnings.push(
-      `Implementation scope reduces actionability by ${complexityPenalty} points because the issue describes ${
-        highRiskScope || largeImplementation
-          ? "complex, cross-cutting, migration, research, or dependency-sensitive work"
-          : "work spanning multiple components"
-      }.`,
+      `Implementation scope reduces actionability by ${complexityPenalty} points because the issue is ${scopeRisk}.`,
     );
-  }
-  if (automatedIssue) {
+  if (automatedIssue)
     warnings.push(
       "This issue appears to be automated infrastructure or dependency-management output rather than a standalone contribution task.",
     );
-  } else if (trackingIssue) {
+  else if (trackingIssue)
     warnings.push(
       "This issue appears to be a roadmap, tracker, or umbrella item rather than a single contribution task.",
     );
-  }
 
   return {
     version: "actionability-v2",
@@ -286,7 +233,7 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
       {
         key: "actionability.classification",
         value: status,
-        basisFactKeys,
+        basisFactKeys: facts.map((item) => item.key),
         caution:
           "Observable issue text and labels indicate readiness, but maintainers can clarify or change direction later.",
       },

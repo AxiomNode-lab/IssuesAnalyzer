@@ -1,21 +1,13 @@
 import * as React from "react";
-
 export type ReportConfidence = "high" | "medium" | "low";
 export type ReportVerdict = "pursue" | "review_carefully" | "skip";
-
 export type ReportEvidence = Readonly<{
   label: string;
   value: string;
   sourceUrl: string;
   freshnessDays?: number;
 }>;
-
-export type ReportInference = Readonly<{
-  label: string;
-  value: string;
-  caution: string;
-}>;
-
+export type ReportInference = Readonly<{ label: string; value: string; caution: string }>;
 export type ReportComponent = Readonly<{
   key: string;
   label: string;
@@ -27,7 +19,6 @@ export type ReportComponent = Readonly<{
   inferences?: readonly ReportInference[];
   warnings?: readonly string[];
 }>;
-
 export type AnalysisReportModel = Readonly<{
   repository: string;
   issueNumber: number;
@@ -45,18 +36,53 @@ export type AnalysisReportModel = Readonly<{
   components: readonly ReportComponent[];
   risks: readonly string[];
 }>;
-
 const verdictLabels: Record<ReportVerdict, string> = {
   pursue: "Pursue",
   review_carefully: "Review carefully",
   skip: "Skip",
 };
-
-function confidenceLabel(value: ReportConfidence): string {
-  return `${value[0]?.toUpperCase()}${value.slice(1)}`;
+const confidenceLabel = (v: ReportConfidence) => `${v[0]?.toUpperCase()}${v.slice(1)}`;
+function scoreExplanation(report: AnalysisReportModel): string[] {
+  const c = Object.fromEntries(report.components.map((x) => [x.key, x]));
+  const parts: string[] = [];
+  const action = c.actionability,
+    competition = c.competition,
+    responsiveness = c.responsiveness,
+    activity = c.activity;
+  if (action)
+    parts.push(
+      action.score >= 85
+        ? `Actionability is a major positive (${action.score}/100): the issue is unusually implementation-ready.`
+        : action.score >= 70
+          ? `Actionability supports the score (${action.score}/100), but scope or clarity leaves some implementation risk.`
+          : `Actionability holds the score back (${action.score}/100); the task is not fully contribution-ready.`,
+    );
+  if (competition)
+    parts.push(
+      competition.score === 0
+        ? "No visible assignee, claim, or linked implementation was found, which supports availability."
+        : competition.score >= 75
+          ? `Visible competition is a major negative (${competition.score}/100 risk); assignment or active implementation makes duplicate work more likely.`
+          : `Visible competition is moderate (${competition.score}/100 risk); contributor claims matter, but are weaker evidence than an assignee or active PR.`,
+    );
+  if (responsiveness)
+    parts.push(
+      responsiveness.score >= 60
+        ? `Observed maintainer response evidence is supportive (${responsiveness.score}/100).`
+        : responsiveness.score === 50
+          ? "Maintainer response evidence is insufficient, so it is treated neutrally rather than as a failure."
+          : `Maintainer responsiveness is a negative (${responsiveness.score}/100) based on the observed historical sample.`,
+    );
+  if (activity)
+    parts.push(
+      activity.score >= 65
+        ? `Repository activity is healthy (${activity.score}/100), reducing abandonment risk.`
+        : `Repository activity contributes only ${activity.score}/100, increasing uncertainty.`,
+    );
+  return parts;
 }
-
 export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
+  const explanation = scoreExplanation(report);
   return (
     <section className="report" aria-labelledby="report-title">
       <header className="report-header">
@@ -76,9 +102,15 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
           <small>{report.scoreVersion}</small>
         </div>
       </header>
-
       <p className="report-decision-reason">{report.decisionReason}</p>
-
+      <div className="score-explanation" role="note" aria-label="Why this score">
+        <strong>Why this score?</strong>
+        <ul>
+          {explanation.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
       {(report.partial || report.stale) && (
         <div className="report-state" role="status" aria-label="Report limitations">
           <strong>Evidence limitations:</strong>{" "}
@@ -87,7 +119,6 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
           {report.stale && "Some evidence is stale and may no longer reflect current activity."}
         </div>
       )}
-
       <dl className="report-summary" aria-label="Report summary">
         <div>
           <dt>Confidence</dt>
@@ -104,7 +135,6 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
           <dd>{report.nextAction}</dd>
         </div>
       </dl>
-
       <div className="report-components" aria-label="Score components">
         {report.components.map((component) => (
           <article className="report-component" key={component.key}>
@@ -124,7 +154,6 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
             <p className="component-confidence">
               Confidence: {confidenceLabel(component.confidence)}
             </p>
-
             <div className="evidence-columns">
               <section aria-labelledby={`${component.key}-facts`}>
                 <h4 id={`${component.key}-facts`}>Facts</h4>
@@ -149,7 +178,6 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
                   ))}
                 </ul>
               </section>
-
               <section className="inference-panel" aria-labelledby={`${component.key}-inferences`}>
                 <h4 id={`${component.key}-inferences`}>Inferences</h4>
                 {(component.inferences?.length ?? 0) === 0 ? (
@@ -168,7 +196,6 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
                 )}
               </section>
             </div>
-
             {(component.warnings?.length ?? 0) > 0 && (
               <div
                 className="component-warnings"
@@ -177,8 +204,8 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
               >
                 <strong>Warnings</strong>
                 <ul>
-                  {component.warnings?.map((warning) => (
-                    <li key={warning}>{warning}</li>
+                  {component.warnings?.map((w) => (
+                    <li key={w}>{w}</li>
                   ))}
                 </ul>
               </div>
@@ -186,11 +213,10 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
           </article>
         ))}
       </div>
-
-      <section className="risk-panel" aria-labelledby="risk-title">
-        <h3 id="risk-title">Risks and limitations</h3>
+      <div className="risk-panel">
+        <h3>Risks and limitations</h3>
         {report.risks.length === 0 ? (
-          <p>No material risk was identified from the available evidence.</p>
+          <p>No material limitations were detected in the available evidence.</p>
         ) : (
           <ul>
             {report.risks.map((risk) => (
@@ -198,11 +224,11 @@ export function AnalysisReport({ report }: { report: AnalysisReportModel }) {
             ))}
           </ul>
         )}
-        <p className="report-disclaimer">
+        <p>
           This report is decision support, not a guarantee of response, acceptance, payment, or
           completion time.
         </p>
-      </section>
+      </div>
     </section>
   );
 }

@@ -75,11 +75,20 @@ function median(values: readonly number[]): number | null {
     : (ordered[middle] ?? null);
 }
 
-function confidence(threadsUsed: number): Readonly<{ level: ConfidenceLevel; value: number }> {
-  if (threadsUsed >= 10) return { level: "high", value: 90 };
-  if (threadsUsed >= 5) return { level: "medium", value: 65 };
-  if (threadsUsed >= 2) return { level: "low", value: 35 };
-  return { level: "low", value: threadsUsed === 1 ? 15 : 0 };
+function confidence(
+  threadsUsed: number,
+  respondedThreads: number,
+): Readonly<{ level: ConfidenceLevel; value: number }> {
+  // A large sample is useful evidence when nobody responds, but latency estimates
+  // need several observed maintainer replies before we call them high confidence.
+  if (respondedThreads === 0) {
+    if (threadsUsed >= 10) return { level: "high", value: 85 };
+    if (threadsUsed >= 5) return { level: "medium", value: 60 };
+    return { level: "low", value: threadsUsed >= 2 ? 30 : threadsUsed === 1 ? 15 : 0 };
+  }
+  if (respondedThreads >= 5 && threadsUsed >= 10) return { level: "high", value: 85 };
+  if (respondedThreads >= 3) return { level: "medium", value: 65 };
+  return { level: "low", value: 35 };
 }
 
 export function analyzeMaintainerResponsiveness(input: ResponsivenessInput): ResponsivenessResult {
@@ -177,15 +186,30 @@ export function analyzeMaintainerResponsiveness(input: ResponsivenessInput): Res
 
   const enoughSample = threads.length >= MIN_CLASSIFICATION_SAMPLE;
   const coverage = responseCoverage ?? 0;
-  const status: ResponsivenessStatus = !enoughSample
-    ? "insufficient"
-    : coverage >= 75 && medianHours !== null && medianHours <= 48
-      ? "responsive"
-      : coverage >= 50 && medianHours !== null && medianHours <= 168
-        ? "mixed"
-        : "slow";
-  const score =
-    status === "insufficient" ? 50 : status === "responsive" ? 85 : status === "mixed" ? 60 : 25;
+  let status: ResponsivenessStatus;
+  let score: number;
+  if (!enoughSample) {
+    status = "insufficient";
+    score = 50;
+  } else if (respondedThreads === 0) {
+    status = "slow";
+    score = 25;
+  } else if (medianHours !== null && medianHours <= 24) {
+    // Fast observed replies should not be described as slow merely because the
+    // repository only replies to a minority of threads. Coverage still limits
+    // the score and confidence.
+    status = coverage >= 60 ? "responsive" : "mixed";
+    score = coverage >= 60 ? 85 : coverage >= 30 ? 65 : 55;
+  } else if (medianHours !== null && medianHours <= 72) {
+    status = coverage >= 50 ? "responsive" : "mixed";
+    score = coverage >= 50 ? 78 : coverage >= 25 ? 58 : 48;
+  } else if (medianHours !== null && medianHours <= 168 && coverage >= 25) {
+    status = "mixed";
+    score = 50;
+  } else {
+    status = "slow";
+    score = 25;
+  }
 
   if (enoughSample && respondedThreads === 0)
     warnings.push("No maintainer responses were observed in the bounded historical sample.");
@@ -214,7 +238,7 @@ export function analyzeMaintainerResponsiveness(input: ResponsivenessInput): Res
     version: "responsiveness-v1",
     status,
     score,
-    confidence: confidence(threads.length),
+    confidence: confidence(threads.length, respondedThreads),
     facts,
     inferences,
     warnings,

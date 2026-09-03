@@ -88,7 +88,7 @@ describe("analyzeCompetition", () => {
   it("treats claim language as a cautious possible signal", () => {
     const result = analyzeCompetition(input({ comments: [comment("I'd like to work on this")] }));
     expect(result.status).toBe("possible");
-    expect(result.score).toBe(50);
+    expect(result.score).toBe(20);
     expect(result.inferences).toContainEqual(
       expect.objectContaining({
         key: "competition.claimLanguage",
@@ -127,7 +127,7 @@ describe("analyzeCompetition", () => {
   ])("recognizes contributor intent phrasing: %s", (body) => {
     const result = analyzeCompetition(input({ comments: [comment(body)] }));
     expect(result.status).toBe("possible");
-    expect(result.score).toBe(50);
+    expect(result.score).toBe(20);
     expect(result.facts).toContainEqual(
       expect.objectContaining({ key: "competition.claimCommentCount", value: 1 }),
     );
