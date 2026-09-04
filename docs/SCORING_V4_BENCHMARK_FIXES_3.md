@@ -1,1 +1,0 @@
-Benchmark calibration should preserve evidence semantics and relative ordering rather than hard-code issue-specific scores.
