@@ -1,6 +1,328 @@
-export const SCORE_VERSION="opportunity-score-v4" as const;export type ConfidenceLevel="high"|"medium"|"low";export type ComponentKey="activity"|"competition"|"responsiveness"|"actionability";export type Decision="pursue"|"review_carefully"|"skip";export type HardWarningKey="repository_archived"|"repository_disabled"|"issue_closed"|"issue_low_actionability"|"automated_or_tracking_issue"|"stale_opportunity_uncertain_maintainers"|"active_competing_implementation"|"assigned_issue"|"assigned_active_competing_implementation"|"crowded_competition"|"competition_evidence_incomplete";export type ScoreAdjustmentKey="unresolved_maintainer_decision"|"unresolved_dependency"|"research_or_architecture_required"|"migration_or_backfill"|"large_cross_cutting_scope"|"heavy_unresolved_discussion"|"trivial_low_value_contribution";export type ScoreComponentInput=Readonly<{key:ComponentKey;score:number;confidence:Readonly<{level:ConfidenceLevel;value:number}>;evidenceKeys:readonly string[];reason:string;warnings:readonly string[]}>;export type HardWarningInput=Readonly<{key:HardWarningKey;evidenceKeys:readonly string[];reason:string}>;export type OpportunityScoreInput=Readonly<{components:readonly ScoreComponentInput[];hardWarnings?:readonly HardWarningInput[]}>;export type ScoreComponent=Readonly<{key:ComponentKey;rawScore:number;normalizedScore:number;weight:number;weightedPoints:number;evidenceKeys:readonly string[];reason:string;confidence:Readonly<{level:ConfidenceLevel;value:number}>;warnings:readonly string[]}>;export type AppliedHardWarning=HardWarningInput&Readonly<{scoreCap:number}>;export type AppliedScoreAdjustment=Readonly<{key:ScoreAdjustmentKey;points:number;evidenceKeys:readonly string[];reason:string}>;export type OpportunityScoreResult=Readonly<{version:typeof SCORE_VERSION;score:number;baseScore:number;calibratedScore:number;uncappedScore:number;decision:Decision;confidence:Readonly<{level:ConfidenceLevel;value:number}>;components:readonly ScoreComponent[];warnings:readonly string[];hardWarningsApplied:readonly AppliedHardWarning[];adjustmentsApplied:readonly AppliedScoreAdjustment[];decisionReason:string}>;
-const ORDER:readonly ComponentKey[]=["activity","competition","responsiveness","actionability"];export const SCORE_WEIGHTS:Readonly<Record<ComponentKey,number>>={activity:.15,competition:.25,responsiveness:.1,actionability:.5};const HARD_WARNING_CAPS:Readonly<Record<HardWarningKey,number>>={repository_archived:0,repository_disabled:0,issue_closed:0,issue_low_actionability:35,automated_or_tracking_issue:5,stale_opportunity_uncertain_maintainers:69,active_competing_implementation:20,assigned_issue:60,assigned_active_competing_implementation:15,crowded_competition:60,competition_evidence_incomplete:100};const EVIDENCE_ADJUSTMENTS:readonly AppliedScoreAdjustment[]=[{key:"unresolved_maintainer_decision",points:-15,evidenceKeys:["actionability.unresolvedMaintainerDecision"],reason:"Implementation direction still requires a maintainer decision."},{key:"unresolved_dependency",points:-15,evidenceKeys:["actionability.dependencyRisk"],reason:"The issue depends on prerequisite work that can block an independent contribution."},{key:"research_or_architecture_required",points:-10,evidenceKeys:["actionability.researchRisk"],reason:"Research, architecture, or unresolved design work is required before implementation."},{key:"migration_or_backfill",points:-18,evidenceKeys:["actionability.migrationRisk"],reason:"Migration or backfill work raises execution and validation risk."},{key:"large_cross_cutting_scope",points:-10,evidenceKeys:["actionability.largeScopeRisk"],reason:"The implementation spans a large or cross-cutting scope."},{key:"heavy_unresolved_discussion",points:-12,evidenceKeys:["competition.heavyDiscussion"],reason:"The thread has substantial unresolved discussion rather than a clean implementation path."},{key:"trivial_low_value_contribution",points:-15,evidenceKeys:["actionability.trivialContribution"],reason:"The task is unusually trivial or copy/paste-oriented, reducing contribution value."}];
-function assertScore(v:number,n:string){if(!Number.isInteger(v)||v<0||v>100)throw new RangeError(`${n} must be an integer from 0 to 100.`)}function assertNonEmpty(v:readonly string[],n:string){if(!v.length||v.some(x=>!x.trim()))throw new TypeError(`${n} must contain non-empty values.`)}function confidence(value:number){return{level:value>=75?"high" as const:value>=45?"medium" as const:"low" as const,value}}function decision(s:number):Decision{return s>=70?"pursue":s>=40?"review_carefully":"skip"}export function calibrateOpportunityScore(b:number){if(!Number.isFinite(b))throw new RangeError("base score must be finite.");return Math.round(Math.min(100,Math.max(0,b)))}function evidenceSet(c:readonly ScoreComponent[]){return new Set(c.flatMap(x=>x.evidenceKeys))}function automaticAdjustments(c:readonly ScoreComponent[]){const e=evidenceSet(c);return EVIDENCE_ADJUSTMENTS.filter(a=>a.evidenceKeys.every(k=>e.has(k))).map(a=>({...a,evidenceKeys:[...a.evidenceKeys]}))}
-function evidenceWarnings(c:readonly ScoreComponent[]):HardWarningInput[]{const e=evidenceSet(c),out:HardWarningInput[]=[];const active=e.has("competition.activeImplementation"),assigned=e.has("competition.assignedIssue");if(active&&assigned)out.push({key:"assigned_active_competing_implementation",evidenceKeys:["competition.activeImplementation","competition.assignedIssue"],reason:"The issue is assigned and an active linked pull request already exists, so starting competing work is unlikely to be worthwhile."});else if(active)out.push({key:"active_competing_implementation",evidenceKeys:["competition.activeImplementation"],reason:"An active linked pull request already implements this issue; review that work before investing in a competing implementation."});else if(assigned)out.push({key:"assigned_issue",evidenceKeys:["competition.assignedIssue"],reason:"The issue is already assigned, so confirm availability before starting competing work."});if(e.has("competition.crowdedClaims"))out.push({key:"crowded_competition",evidenceKeys:["competition.crowdedClaims"],reason:"Many contributors have recently claimed or applied for this issue, materially reducing the opportunity for new competing work."});return out}
-function decisionReason(r:{score:number;components:readonly ScoreComponent[];hardWarnings:readonly AppliedHardWarning[];adjustments:readonly AppliedScoreAdjustment[]}):string{const p=["repository_archived","repository_disabled","issue_closed","automated_or_tracking_issue","assigned_active_competing_implementation","active_competing_implementation","assigned_issue","crowded_competition","issue_low_actionability","stale_opportunity_uncertain_maintainers"] as const;for(const k of p){const w=r.hardWarnings.find(i=>i.key===k);if(w)return w.reason}const a=[...r.adjustments].sort((x,y)=>x.points-y.points)[0];if(a&&r.score<70)return a.reason;const ac=r.components.find(c=>c.key==="actionability")!,co=r.components.find(c=>c.key==="competition")!,at=r.components.find(c=>c.key==="activity")!,re=r.components.find(c=>c.key==="responsiveness")!;if(co.rawScore>=65)return"Visible competition materially reduces the value of starting a new implementation now.";if(r.score>=85)return"The issue is highly actionable, appears available, and the repository signals support a strong contribution opportunity.";if(r.score>=70)return"The issue appears actionable, available, and sufficiently valuable to pursue based on the observed evidence.";if(ac.rawScore<70)return"The issue is not yet clearly contribution-ready; confirm scope and implementation direction first.";if(at.rawScore<50&&re.confidence.level==="low")return"The issue appears actionable, but repository activity is weak and maintainer-response evidence is limited.";if(at.rawScore<50)return"The issue appears actionable, but repository activity is weak or stale.";if(re.confidence.level==="low")return"The issue appears actionable, but maintainer-response evidence is limited; treat the score with lower confidence.";return"The available evidence supports caution before starting work."}
-export function calculateOpportunityScore(input:OpportunityScoreInput):OpportunityScoreResult{if(input.components.length!==ORDER.length)throw new TypeError("Exactly one activity, competition, responsiveness, and actionability component is required.");const by=new Map<ComponentKey,ScoreComponentInput>();for(const c of input.components){if(by.has(c.key))throw new TypeError(`Duplicate component: ${c.key}.`);assertScore(c.score,`${c.key} score`);assertScore(c.confidence.value,`${c.key} confidence`);assertNonEmpty(c.evidenceKeys,`${c.key} evidenceKeys`);if(!c.reason.trim())throw new TypeError(`${c.key} reason must not be empty.`);by.set(c.key,c)}const components=ORDER.map((key):ScoreComponent=>{const c=by.get(key);if(!c)throw new TypeError(`Missing component: ${key}.`);const normalizedScore=key==="competition"?100-c.score:c.score,weight=SCORE_WEIGHTS[key];return{key,rawScore:c.score,normalizedScore,weight,weightedPoints:Math.round(normalizedScore*weight*10)/10,evidenceKeys:[...c.evidenceKeys],reason:c.reason,confidence:{...c.confidence},warnings:[...c.warnings]}});const baseScore=Math.round(components.reduce((t,c)=>t+c.normalizedScore*c.weight,0)),calibratedScore=calibrateOpportunityScore(baseScore),adjustmentsApplied=automaticAdjustments(components),adjustedScore=Math.max(0,Math.min(100,calibratedScore+adjustmentsApplied.reduce((t,a)=>t+a.points,0))),overallConfidence=Math.round(components.reduce((t,c)=>t+c.confidence.value*c.weight,0));const supplied=[...(input.hardWarnings??[])],derived=evidenceWarnings(components),dedup=new Map<HardWarningKey,HardWarningInput>();for(const w of [...supplied,...derived])dedup.set(w.key,w);const hardWarningsApplied=[...dedup.values()].map((w):AppliedHardWarning=>{assertNonEmpty(w.evidenceKeys,`${w.key} evidenceKeys`);if(!w.reason.trim())throw new TypeError(`${w.key} reason must not be empty.`);return{...w,evidenceKeys:[...w.evidenceKeys],scoreCap:HARD_WARNING_CAPS[w.key]}}),scoreCap=hardWarningsApplied.reduce((l,w)=>Math.min(l,w.scoreCap),100),score=Math.min(adjustedScore,scoreCap);return{version:SCORE_VERSION,score,baseScore,calibratedScore,uncappedScore:adjustedScore,decision:decision(score),confidence:confidence(overallConfidence),components,warnings:[...components.flatMap(c=>c.warnings),...adjustmentsApplied.map(a=>a.reason)],hardWarningsApplied,adjustmentsApplied,decisionReason:decisionReason({score,components,hardWarnings:hardWarningsApplied,adjustments:adjustmentsApplied})}}
+export const SCORE_VERSION = "opportunity-score-v4" as const;
+export type ConfidenceLevel = "high" | "medium" | "low";
+export type ComponentKey = "activity" | "competition" | "responsiveness" | "actionability";
+export type Decision = "pursue" | "review_carefully" | "skip";
+export type HardWarningKey =
+  | "repository_archived"
+  | "repository_disabled"
+  | "issue_closed"
+  | "issue_low_actionability"
+  | "automated_or_tracking_issue"
+  | "stale_opportunity_uncertain_maintainers"
+  | "active_competing_implementation"
+  | "assigned_issue"
+  | "assigned_active_competing_implementation"
+  | "crowded_competition"
+  | "competition_evidence_incomplete";
+export type ScoreAdjustmentKey =
+  | "unresolved_maintainer_decision"
+  | "unresolved_dependency"
+  | "research_or_architecture_required"
+  | "migration_or_backfill"
+  | "large_cross_cutting_scope"
+  | "heavy_unresolved_discussion"
+  | "trivial_low_value_contribution";
+export type ScoreComponentInput = Readonly<{
+  key: ComponentKey;
+  score: number;
+  confidence: Readonly<{ level: ConfidenceLevel; value: number }>;
+  evidenceKeys: readonly string[];
+  reason: string;
+  warnings: readonly string[];
+}>;
+export type HardWarningInput = Readonly<{
+  key: HardWarningKey;
+  evidenceKeys: readonly string[];
+  reason: string;
+}>;
+export type OpportunityScoreInput = Readonly<{
+  components: readonly ScoreComponentInput[];
+  hardWarnings?: readonly HardWarningInput[];
+}>;
+export type ScoreComponent = Readonly<{
+  key: ComponentKey;
+  rawScore: number;
+  normalizedScore: number;
+  weight: number;
+  weightedPoints: number;
+  evidenceKeys: readonly string[];
+  reason: string;
+  confidence: Readonly<{ level: ConfidenceLevel; value: number }>;
+  warnings: readonly string[];
+}>;
+export type AppliedHardWarning = HardWarningInput & Readonly<{ scoreCap: number }>;
+export type AppliedScoreAdjustment = Readonly<{
+  key: ScoreAdjustmentKey;
+  points: number;
+  evidenceKeys: readonly string[];
+  reason: string;
+}>;
+export type OpportunityScoreResult = Readonly<{
+  version: typeof SCORE_VERSION;
+  score: number;
+  baseScore: number;
+  calibratedScore: number;
+  uncappedScore: number;
+  decision: Decision;
+  confidence: Readonly<{ level: ConfidenceLevel; value: number }>;
+  components: readonly ScoreComponent[];
+  warnings: readonly string[];
+  hardWarningsApplied: readonly AppliedHardWarning[];
+  adjustmentsApplied: readonly AppliedScoreAdjustment[];
+  decisionReason: string;
+}>;
+const ORDER: readonly ComponentKey[] = [
+  "activity",
+  "competition",
+  "responsiveness",
+  "actionability",
+];
+export const SCORE_WEIGHTS: Readonly<Record<ComponentKey, number>> = {
+  activity: 0.15,
+  competition: 0.25,
+  responsiveness: 0.1,
+  actionability: 0.5,
+};
+const HARD_WARNING_CAPS: Readonly<Record<HardWarningKey, number>> = {
+  repository_archived: 0,
+  repository_disabled: 0,
+  issue_closed: 0,
+  issue_low_actionability: 35,
+  automated_or_tracking_issue: 5,
+  stale_opportunity_uncertain_maintainers: 69,
+  active_competing_implementation: 20,
+  assigned_issue: 60,
+  assigned_active_competing_implementation: 15,
+  crowded_competition: 60,
+  competition_evidence_incomplete: 100,
+};
+const EVIDENCE_ADJUSTMENTS: readonly AppliedScoreAdjustment[] = [
+  {
+    key: "unresolved_maintainer_decision",
+    points: -15,
+    evidenceKeys: ["actionability.unresolvedMaintainerDecision"],
+    reason: "Implementation direction still requires a maintainer decision.",
+  },
+  {
+    key: "unresolved_dependency",
+    points: -15,
+    evidenceKeys: ["actionability.dependencyRisk"],
+    reason: "The issue depends on prerequisite work that can block an independent contribution.",
+  },
+  {
+    key: "research_or_architecture_required",
+    points: -10,
+    evidenceKeys: ["actionability.researchRisk"],
+    reason: "Research, architecture, or unresolved design work is required before implementation.",
+  },
+  {
+    key: "migration_or_backfill",
+    points: -18,
+    evidenceKeys: ["actionability.migrationRisk"],
+    reason: "Migration or backfill work raises execution and validation risk.",
+  },
+  {
+    key: "large_cross_cutting_scope",
+    points: -10,
+    evidenceKeys: ["actionability.largeScopeRisk"],
+    reason: "The implementation spans a large or cross-cutting scope.",
+  },
+  {
+    key: "heavy_unresolved_discussion",
+    points: -12,
+    evidenceKeys: ["competition.heavyDiscussion"],
+    reason:
+      "The thread has substantial unresolved discussion rather than a clean implementation path.",
+  },
+  {
+    key: "trivial_low_value_contribution",
+    points: -15,
+    evidenceKeys: ["actionability.trivialContribution"],
+    reason: "The task is unusually trivial or copy/paste-oriented, reducing contribution value.",
+  },
+];
+function assertScore(v: number, n: string) {
+  if (!Number.isInteger(v) || v < 0 || v > 100)
+    throw new RangeError(`${n} must be an integer from 0 to 100.`);
+}
+function assertNonEmpty(v: readonly string[], n: string) {
+  if (!v.length || v.some((x) => !x.trim()))
+    throw new TypeError(`${n} must contain non-empty values.`);
+}
+function confidence(value: number) {
+  return {
+    level: value >= 75 ? ("high" as const) : value >= 45 ? ("medium" as const) : ("low" as const),
+    value,
+  };
+}
+function decision(s: number): Decision {
+  return s >= 70 ? "pursue" : s >= 40 ? "review_carefully" : "skip";
+}
+export function calibrateOpportunityScore(b: number) {
+  if (!Number.isFinite(b)) throw new RangeError("base score must be finite.");
+  return Math.round(Math.min(100, Math.max(0, b)));
+}
+function evidenceSet(c: readonly ScoreComponent[]) {
+  return new Set(c.flatMap((x) => x.evidenceKeys));
+}
+function automaticAdjustments(c: readonly ScoreComponent[]) {
+  const e = evidenceSet(c);
+  return EVIDENCE_ADJUSTMENTS.filter((a) => a.evidenceKeys.every((k) => e.has(k))).map((a) => ({
+    ...a,
+    evidenceKeys: [...a.evidenceKeys],
+  }));
+}
+function evidenceWarnings(c: readonly ScoreComponent[]): HardWarningInput[] {
+  const e = evidenceSet(c),
+    out: HardWarningInput[] = [];
+  const active = e.has("competition.activeImplementation"),
+    assigned = e.has("competition.assignedIssue");
+  if (active && assigned)
+    out.push({
+      key: "assigned_active_competing_implementation",
+      evidenceKeys: ["competition.activeImplementation", "competition.assignedIssue"],
+      reason:
+        "The issue is assigned and an active linked pull request already exists, so starting competing work is unlikely to be worthwhile.",
+    });
+  else if (active)
+    out.push({
+      key: "active_competing_implementation",
+      evidenceKeys: ["competition.activeImplementation"],
+      reason:
+        "An active linked pull request already implements this issue; review that work before investing in a competing implementation.",
+    });
+  else if (assigned)
+    out.push({
+      key: "assigned_issue",
+      evidenceKeys: ["competition.assignedIssue"],
+      reason:
+        "The issue is already assigned, so confirm availability before starting competing work.",
+    });
+  if (e.has("competition.crowdedClaims"))
+    out.push({
+      key: "crowded_competition",
+      evidenceKeys: ["competition.crowdedClaims"],
+      reason:
+        "Many contributors have recently claimed or applied for this issue, materially reducing the opportunity for new competing work.",
+    });
+  return out;
+}
+function decisionReason(r: {
+  score: number;
+  components: readonly ScoreComponent[];
+  hardWarnings: readonly AppliedHardWarning[];
+  adjustments: readonly AppliedScoreAdjustment[];
+}): string {
+  const p = [
+    "repository_archived",
+    "repository_disabled",
+    "issue_closed",
+    "automated_or_tracking_issue",
+    "assigned_active_competing_implementation",
+    "active_competing_implementation",
+    "assigned_issue",
+    "crowded_competition",
+    "issue_low_actionability",
+    "stale_opportunity_uncertain_maintainers",
+  ] as const;
+  for (const k of p) {
+    const w = r.hardWarnings.find((i) => i.key === k);
+    if (w) return w.reason;
+  }
+  const a = [...r.adjustments].sort((x, y) => x.points - y.points)[0];
+  if (a && r.score < 70) return a.reason;
+  const ac = r.components.find((c) => c.key === "actionability")!,
+    co = r.components.find((c) => c.key === "competition")!,
+    at = r.components.find((c) => c.key === "activity")!,
+    re = r.components.find((c) => c.key === "responsiveness")!;
+  if (co.rawScore >= 65)
+    return "Visible competition materially reduces the value of starting a new implementation now.";
+  if (r.score >= 85)
+    return "The issue is highly actionable, appears available, and the repository signals support a strong contribution opportunity.";
+  if (r.score >= 70)
+    return "The issue appears actionable, available, and sufficiently valuable to pursue based on the observed evidence.";
+  if (ac.rawScore < 70)
+    return "The issue is not yet clearly contribution-ready; confirm scope and implementation direction first.";
+  if (at.rawScore < 50 && re.confidence.level === "low")
+    return "The issue appears actionable, but repository activity is weak and maintainer-response evidence is limited.";
+  if (at.rawScore < 50)
+    return "The issue appears actionable, but repository activity is weak or stale.";
+  if (re.confidence.level === "low")
+    return "The issue appears actionable, but maintainer-response evidence is limited; treat the score with lower confidence.";
+  return "The available evidence supports caution before starting work.";
+}
+export function calculateOpportunityScore(input: OpportunityScoreInput): OpportunityScoreResult {
+  if (input.components.length !== ORDER.length)
+    throw new TypeError(
+      "Exactly one activity, competition, responsiveness, and actionability component is required.",
+    );
+  const by = new Map<ComponentKey, ScoreComponentInput>();
+  for (const c of input.components) {
+    if (by.has(c.key)) throw new TypeError(`Duplicate component: ${c.key}.`);
+    assertScore(c.score, `${c.key} score`);
+    assertScore(c.confidence.value, `${c.key} confidence`);
+    assertNonEmpty(c.evidenceKeys, `${c.key} evidenceKeys`);
+    if (!c.reason.trim()) throw new TypeError(`${c.key} reason must not be empty.`);
+    by.set(c.key, c);
+  }
+  const components = ORDER.map((key): ScoreComponent => {
+    const c = by.get(key);
+    if (!c) throw new TypeError(`Missing component: ${key}.`);
+    const normalizedScore = key === "competition" ? 100 - c.score : c.score,
+      weight = SCORE_WEIGHTS[key];
+    return {
+      key,
+      rawScore: c.score,
+      normalizedScore,
+      weight,
+      weightedPoints: Math.round(normalizedScore * weight * 10) / 10,
+      evidenceKeys: [...c.evidenceKeys],
+      reason: c.reason,
+      confidence: { ...c.confidence },
+      warnings: [...c.warnings],
+    };
+  });
+  const baseScore = Math.round(components.reduce((t, c) => t + c.normalizedScore * c.weight, 0)),
+    calibratedScore = calibrateOpportunityScore(baseScore),
+    adjustmentsApplied = automaticAdjustments(components),
+    adjustedScore = Math.max(
+      0,
+      Math.min(100, calibratedScore + adjustmentsApplied.reduce((t, a) => t + a.points, 0)),
+    ),
+    overallConfidence = Math.round(
+      components.reduce((t, c) => t + c.confidence.value * c.weight, 0),
+    );
+  const supplied = [...(input.hardWarnings ?? [])],
+    derived = evidenceWarnings(components),
+    dedup = new Map<HardWarningKey, HardWarningInput>();
+  for (const w of [...supplied, ...derived]) dedup.set(w.key, w);
+  const hardWarningsApplied = [...dedup.values()].map((w): AppliedHardWarning => {
+      assertNonEmpty(w.evidenceKeys, `${w.key} evidenceKeys`);
+      if (!w.reason.trim()) throw new TypeError(`${w.key} reason must not be empty.`);
+      return { ...w, evidenceKeys: [...w.evidenceKeys], scoreCap: HARD_WARNING_CAPS[w.key] };
+    }),
+    scoreCap = hardWarningsApplied.reduce((l, w) => Math.min(l, w.scoreCap), 100),
+    score = Math.min(adjustedScore, scoreCap);
+  return {
+    version: SCORE_VERSION,
+    score,
+    baseScore,
+    calibratedScore,
+    uncappedScore: adjustedScore,
+    decision: decision(score),
+    confidence: confidence(overallConfidence),
+    components,
+    warnings: [
+      ...components.flatMap((c) => c.warnings),
+      ...adjustmentsApplied.map((a) => a.reason),
+    ],
+    hardWarningsApplied,
+    adjustmentsApplied,
+    decisionReason: decisionReason({
+      score,
+      components,
+      hardWarnings: hardWarningsApplied,
+      adjustments: adjustmentsApplied,
+    }),
+  };
+}
