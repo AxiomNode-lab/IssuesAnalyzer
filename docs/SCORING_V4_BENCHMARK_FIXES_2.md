@@ -1,1 +1,0 @@
-Validation target: rerun the same live benchmark set after CI passes; do not tune to exact benchmark numbers, verify that blockers and relative ordering are correct.
