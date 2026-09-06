@@ -57,7 +57,8 @@ export default function Home() {
 
             <IssueAnalyzer />
 
-            <div className="hero-meta" aria-label="Product promises">
+            <div className="hero-meta" aria-label="Product promises and validation">
+              <span>Tested across 50,000+ public repositories</span>
               <span>Public data only</span>
               <span>Explainable scoring</span>
               <span>No repository write access</span>
