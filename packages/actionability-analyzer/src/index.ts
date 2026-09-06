@@ -1,6 +1,5 @@
 export type ActionabilityStatus = "high" | "medium" | "low";
 export type ConfidenceLevel = "high" | "medium" | "low";
-
 export type ActionabilityInput = Readonly<{
   asOf: Date;
   issue: Readonly<{
@@ -32,7 +31,6 @@ export type ActionabilityResult = Readonly<{
   inferences: readonly ActionabilityInference[];
   warnings: readonly string[];
 }>;
-
 const POSITIVE_LABEL = /^(?:bug|enhancement|feature|good first issue|help wanted|easy to fix)$/i;
 const DISCUSSION_LABEL = /^(?:meta|discuss|discussion|question|rfc|proposal|brainstorm)$/i;
 const AUTOMATED_LABEL = /^(?:automated|bot|renovate|dependencies|dependency dashboard)$/i;
@@ -65,14 +63,11 @@ const MODERATE_SCOPE =
 const MIGRATION_SCOPE =
   /\b(?:database migration|schema migration|data migration|backfill|migrate existing|existing rows?|existing records?)\b/i;
 const DEPENDENCY_SCOPE =
-  /\b(?:blocked by|depends on|dependency on|prerequisite|after #\d+|requires #\d+)\b/i;
-const SECURITY_SCOPE =
-  /\b(?:security-sensitive|authentication|authorization|credential|token leak|privilege|permission)\b/i;
+  /\b(?:blocked by|depends?\s+on|dependencies?\s*:?\s*#?\d*|prerequisites?|after\s+#\d+|requires?\s+#\d+|requires?\s+(?:issue|pr)\s*#?\d+)\b/i;
 const RESEARCH_SCOPE =
   /\b(?:external research|research required|unresolved design|architecture change|architectural|breaking change|cross-cutting)\b/i;
 const LARGE_IMPLEMENTATION =
   /\b(?:large implementation|multi-step implementation|phased rollout|multiple services|several packages|many components)\b/i;
-
 function confidence(signalCount: number, bodyAvailable: boolean) {
   const value = !bodyAvailable ? 25 : signalCount >= 3 ? 85 : signalCount >= 1 ? 65 : 35;
   return {
@@ -80,56 +75,55 @@ function confidence(signalCount: number, bodyAvailable: boolean) {
     value,
   };
 }
-
 export function analyzeIssueActionability(input: ActionabilityInput): ActionabilityResult {
   if (Number.isNaN(input.asOf.getTime())) throw new TypeError("Invalid asOf date.");
   if (input.issue.title.trim().length === 0) throw new TypeError("Issue title must not be empty.");
-  const labels = input.issue.labels.map((label) => label.trim()).filter(Boolean);
-  const body = input.issue.body ?? "";
-  const text = `${input.issue.title}\n${body}`;
-  const positiveLabels = labels.filter((label) => POSITIVE_LABEL.test(label));
-  const discussionLabels = labels.filter((label) => DISCUSSION_LABEL.test(label));
-  const automatedLabels = labels.filter((label) => AUTOMATED_LABEL.test(label));
-  const concreteRequest = CONCRETE_REQUEST.test(text);
-  const acceptanceCriteria = ACCEPTANCE_CRITERIA.test(body);
-  const reproduction = REPRODUCTION.test(body);
-  const specificTarget = SPECIFIC_TARGET.test(text);
-  const acceptedDirection = ACCEPTED_DIRECTION.test(text);
-  const unresolvedDirection = !acceptedDirection && UNRESOLVED_DIRECTION.test(text);
-  const trackingIssue = TRACKING_ISSUE.test(text);
-  const automatedIssue = automatedLabels.length > 0 || AUTOMATED_ISSUE.test(text);
-  const independentlyActionable =
-    concreteRequest && specificTarget && (acceptanceCriteria || reproduction || acceptedDirection);
-  const automatedOrTracking = automatedIssue || (trackingIssue && !independentlyActionable);
-  const proposalStyle = !acceptedDirection && PROPOSAL_STYLE.test(text);
-  const trivialContribution = TRIVIAL_CONTRIBUTION.test(text);
-  const unresolvedMaintainerDecision =
-    !acceptedDirection &&
-    (unresolvedDirection || (proposalStyle && !acceptanceCriteria && !reproduction));
-  const moderateScope = MODERATE_SCOPE.test(text);
-  const migrationScope = MIGRATION_SCOPE.test(text);
-  const dependencyScope = DEPENDENCY_SCOPE.test(text);
-  const securityScope = SECURITY_SCOPE.test(text);
-  const researchScope = RESEARCH_SCOPE.test(text);
-  const largeImplementation = LARGE_IMPLEMENTATION.test(text);
+  const labels = input.issue.labels.map((l) => l.trim()).filter(Boolean),
+    body = input.issue.body ?? "",
+    text = `${input.issue.title}\n${body}`;
+  const positiveLabels = labels.filter((l) => POSITIVE_LABEL.test(l)),
+    discussionLabels = labels.filter((l) => DISCUSSION_LABEL.test(l)),
+    automatedLabels = labels.filter((l) => AUTOMATED_LABEL.test(l));
+  const concreteRequest = CONCRETE_REQUEST.test(text),
+    acceptanceCriteria = ACCEPTANCE_CRITERIA.test(body),
+    reproduction = REPRODUCTION.test(body),
+    specificTarget = SPECIFIC_TARGET.test(text),
+    acceptedDirection = ACCEPTED_DIRECTION.test(text),
+    unresolvedDirection = !acceptedDirection && UNRESOLVED_DIRECTION.test(text),
+    trackingIssue = TRACKING_ISSUE.test(text),
+    automatedIssue = automatedLabels.length > 0 || AUTOMATED_ISSUE.test(text),
+    independentlyActionable =
+      concreteRequest &&
+      specificTarget &&
+      (acceptanceCriteria || reproduction || acceptedDirection),
+    automatedOrTracking = automatedIssue || (trackingIssue && !independentlyActionable),
+    proposalStyle = !acceptedDirection && PROPOSAL_STYLE.test(text),
+    trivialContribution = TRIVIAL_CONTRIBUTION.test(text),
+    unresolvedMaintainerDecision =
+      !acceptedDirection &&
+      (unresolvedDirection || (proposalStyle && !acceptanceCriteria && !reproduction));
+  const moderateScope = MODERATE_SCOPE.test(text),
+    migrationScope = MIGRATION_SCOPE.test(text),
+    dependencyScope = DEPENDENCY_SCOPE.test(text),
+    researchScope = RESEARCH_SCOPE.test(text),
+    largeImplementation = LARGE_IMPLEMENTATION.test(text);
+  // Security subject matter is not complexity by itself. Only observable scope/coordination costs reduce actionability.
   const complexityPenalty = Math.min(
     35,
     (moderateScope ? 6 : 0) +
       (migrationScope ? 16 : 0) +
       (dependencyScope ? 10 : 0) +
-      (securityScope ? 6 : 0) +
       (researchScope ? 12 : 0) +
       (largeImplementation ? 10 : 0),
   );
-  const headingAlternativeCount = [...body.matchAll(HEADING_ALTERNATIVE)].length;
-  const numberedAlternativeCount = ALTERNATIVE_CONTEXT.test(body)
-    ? [...body.matchAll(NUMBERED_ALTERNATIVE)].length
-    : 0;
-  const alternativeCount = acceptedDirection
-    ? 0
-    : Math.max(headingAlternativeCount, numberedAlternativeCount);
-  const multipleAlternatives = alternativeCount >= 2;
-
+  const headingAlternativeCount = [...body.matchAll(HEADING_ALTERNATIVE)].length,
+    numberedAlternativeCount = ALTERNATIVE_CONTEXT.test(body)
+      ? [...body.matchAll(NUMBERED_ALTERNATIVE)].length
+      : 0,
+    alternativeCount = acceptedDirection
+      ? 0
+      : Math.max(headingAlternativeCount, numberedAlternativeCount),
+    multipleAlternatives = alternativeCount >= 2;
   let score = 50;
   score += Math.min(15, positiveLabels.length * 15);
   score -= Math.min(30, discussionLabels.length * 15);
@@ -147,7 +141,6 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
   score -= complexityPenalty;
   score = Math.min(100, Math.max(0, score));
   if (automatedOrTracking) score = Math.min(score, 20);
-
   const scopeRisk =
     complexityPenalty === 0
       ? "self-contained"
@@ -159,9 +152,7 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
             ? "dependency-sensitive"
             : researchScope || largeImplementation
               ? "complex or cross-cutting"
-              : securityScope
-                ? "security-sensitive"
-                : "moderate multi-component scope";
+              : "moderate multi-component scope";
   const fact = (key: string, value: string | number | boolean | null): ActionabilityFact => ({
     key,
     value,
@@ -191,7 +182,6 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
   if (largeImplementation || (moderateScope && researchScope))
     facts.push(fact("actionability.largeScopeRisk", true));
   if (trivialContribution) facts.push(fact("actionability.trivialContribution", true));
-
   const status: ActionabilityStatus = score >= 70 ? "high" : score >= 40 ? "medium" : "low";
   const signalCount = [
     positiveLabels.length > 0,
@@ -211,7 +201,6 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
     moderateScope,
     migrationScope,
     dependencyScope,
-    securityScope,
     researchScope,
     largeImplementation,
   ].filter(Boolean).length;
@@ -240,7 +229,6 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
     warnings.push(
       "This issue appears to be a roadmap, tracker, or umbrella item rather than a single contribution task.",
     );
-
   return {
     version: "actionability-v2",
     status,
@@ -251,7 +239,7 @@ export function analyzeIssueActionability(input: ActionabilityInput): Actionabil
       {
         key: "actionability.classification",
         value: status,
-        basisFactKeys: facts.map((item) => item.key),
+        basisFactKeys: facts.map((i) => i.key),
         caution:
           "Observable issue text and labels indicate readiness, but maintainers can clarify or change direction later.",
       },

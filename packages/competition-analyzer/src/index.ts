@@ -6,6 +6,7 @@ export type CommentEvidence = Readonly<{
   body: string | null;
   createdAt: Date;
   sourceUrl: string;
+  authorIsMaintainer?: boolean;
 }>;
 export type PullRequestEvidence = Readonly<{
   number: number;
@@ -67,12 +68,10 @@ export type CompetitionResult = Readonly<{
     pullRequestsUsed: number;
   }>;
 }>;
-
-const DAY = 86_400_000;
-const MAX_COMMENTS = 500;
-const MAX_TIMELINE_EVENTS = 300;
-const MAX_PULL_REQUESTS = 100;
-
+const DAY = 86400000,
+  MAX_COMMENTS = 500,
+  MAX_TIMELINE_EVENTS = 300,
+  MAX_PULL_REQUESTS = 100;
 const CLAIM_PATTERNS = [
   /\b(?:i(?:'|’)d|i would)\s+(?:like|love|glad|be happy)\s+to\s+(?:work on|take|tackle|handle|pick up|contribute to)\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
   /\b(?:i(?:'|’)ll|i will|i can|i could|i(?:'|’)m going to|i am going to)\s+(?:work on|take|tackle|handle|pick up)\s+(?:this|the)(?:\s+(?:issue|task|one))?\b/i,
@@ -99,135 +98,127 @@ const NON_CLAIM_PATTERNS = [
   /\b(?:no longer|stopped|stop|dropping|drop|giving up|gave up)\s+(?:working on|work on|this|the)\b/i,
   /\b(?:please\s+)?unassign\s+me\b/i,
 ];
-const hasClaimLanguage = (body: string) =>
-  !NON_CLAIM_PATTERNS.some((pattern) => pattern.test(body)) &&
-  CLAIM_PATTERNS.some((pattern) => pattern.test(body));
-
-function validDate(value: Date, name: string): void {
-  if (Number.isNaN(value.getTime())) throw new TypeError(`Invalid ${name} date.`);
+const hasClaimLanguage = (b: string) =>
+  !NON_CLAIM_PATTERNS.some((p) => p.test(b)) && CLAIM_PATTERNS.some((p) => p.test(b));
+function validDate(v: Date, n: string) {
+  if (Number.isNaN(v.getTime())) throw new TypeError(`Invalid ${n} date.`);
 }
-function historicalDate(value: Date, asOf: Date, name: string): void {
-  validDate(value, name);
-  if (value > asOf) throw new RangeError(`${name} date cannot be after asOf.`);
+function historicalDate(v: Date, a: Date, n: string) {
+  validDate(v, n);
+  if (v > a) throw new RangeError(`${n} date cannot be after asOf.`);
 }
-function daysBetween(later: Date, earlier: Date): number {
-  return Math.max(0, Math.floor((later.getTime() - earlier.getTime()) / DAY));
+function daysBetween(l: Date, e: Date) {
+  return Math.max(0, Math.floor((l.getTime() - e.getTime()) / DAY));
 }
 function newestBounded<T>(
   items: readonly T[],
   limit: number,
-  dateOf: (item: T) => Date,
-  keyOf: (item: T) => string,
-): T[] {
+  dateOf: (i: T) => Date,
+  keyOf: (i: T) => string,
+) {
   return [...items]
-    .sort(
-      (left, right) =>
-        dateOf(right).getTime() - dateOf(left).getTime() || keyOf(left).localeCompare(keyOf(right)),
-    )
+    .sort((a, b) => dateOf(b).getTime() - dateOf(a).getTime() || keyOf(a).localeCompare(keyOf(b)))
     .slice(0, limit);
 }
-const isBot = (login: string) => login.toLowerCase().endsWith("[bot]");
-function referencesIssue(text: string, number: number, url: string): boolean {
-  if (text.includes(url)) return true;
-  const shortReference = `#${number}`;
-  const index = text.indexOf(shortReference);
-  if (index === -1) return false;
-  const before = index === 0 ? " " : (text[index - 1] ?? " ");
-  const after = text[index + shortReference.length] ?? " ";
-  return /\s/.test(before) && /[\s.,;:!?)}\]]/.test(after);
+const isBot = (l: string) => l.toLowerCase().endsWith("[bot]");
+function referencesIssue(t: string, n: number, u: string) {
+  if (t.includes(u)) return true;
+  return new RegExp(`(^|\\s)#${n}(?=$|[\\s.,;:!?)}\\]])`).test(t);
 }
-function confidence(sources: number, incomplete: number) {
-  const value = Math.max(0, Math.round((sources / 4) * 100) - incomplete * 30);
+function referencedPrNumbers(t: string) {
+  return [
+    ...new Set([...t.matchAll(/#(\d+)\b/g)].map((m) => Number(m[1])).filter(Number.isSafeInteger)),
+  ];
+}
+const RESOLUTION_LANGUAGE =
+  /\b(?:fix(?:ed|es)?|resolv(?:e|ed|es)|implement(?:ed|s)?|address(?:ed|es)?|work(?:ing)?\s+on|handled?)\b/i;
+function confidence(s: number, i: number) {
+  const value = Math.max(0, Math.round((s / 4) * 100) - i * 30);
   return {
     level: value >= 75 ? ("high" as const) : value >= 50 ? ("medium" as const) : ("low" as const),
     value,
   };
 }
-function validatePullRequest(pr: PullRequestEvidence, asOf: Date): void {
-  historicalDate(pr.createdAt, asOf, "pull request creation");
-  historicalDate(pr.updatedAt, asOf, "pull request update");
-  if (pr.closedAt) historicalDate(pr.closedAt, asOf, "pull request closure");
-  if (pr.mergedAt) historicalDate(pr.mergedAt, asOf, "pull request merge");
+function validatePullRequest(p: PullRequestEvidence, a: Date) {
+  historicalDate(p.createdAt, a, "pull request creation");
+  historicalDate(p.updatedAt, a, "pull request update");
+  if (p.closedAt) historicalDate(p.closedAt, a, "pull request closure");
+  if (p.mergedAt) historicalDate(p.mergedAt, a, "pull request merge");
 }
-function claimRisk(count: number, freshnessDays: number): number {
-  if (count === 0) return 0;
-  const base = count >= 8 ? 45 : count >= 4 ? 35 : count >= 2 ? 25 : 15;
-  const freshness = freshnessDays <= 14 ? 5 : freshnessDays <= 45 ? 0 : -5;
-  return Math.max(10, Math.min(50, base + freshness));
+function claimRisk(c: number, d: number) {
+  if (!c) return 0;
+  const base = c >= 8 ? 80 : c >= 6 ? 70 : c >= 4 ? 60 : c >= 2 ? 35 : 15,
+    f = d <= 14 ? 5 : d <= 45 ? 0 : -5;
+  return Math.max(10, Math.min(90, base + f));
 }
-
 export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
   validDate(input.asOf, "asOf");
-  if (!Number.isSafeInteger(input.issue.number) || input.issue.number <= 0) {
+  if (!Number.isSafeInteger(input.issue.number) || input.issue.number <= 0)
     throw new RangeError("Issue number must be a positive safe integer.");
+  for (const i of input.comments ?? []) historicalDate(i.createdAt, input.asOf, "comment");
+  for (const i of input.timeline ?? []) {
+    historicalDate(i.createdAt, input.asOf, "timeline event");
+    if (i.referencedPullRequest) validatePullRequest(i.referencedPullRequest, input.asOf);
   }
-
-  for (const item of input.comments ?? []) historicalDate(item.createdAt, input.asOf, "comment");
-  for (const item of input.timeline ?? []) {
-    historicalDate(item.createdAt, input.asOf, "timeline event");
-    if (item.referencedPullRequest) validatePullRequest(item.referencedPullRequest, input.asOf);
-  }
-  for (const item of input.pullRequests ?? []) validatePullRequest(item, input.asOf);
-
+  for (const i of input.pullRequests ?? []) validatePullRequest(i, input.asOf);
   const comments = newestBounded(
-    input.comments ?? [],
-    MAX_COMMENTS,
-    (item) => item.createdAt,
-    (item) => item.sourceUrl,
-  );
-  const timeline = newestBounded(
-    input.timeline ?? [],
-    MAX_TIMELINE_EVENTS,
-    (item) => item.createdAt,
-    (item) => `${item.event}:${item.sourceUrl}:${item.referencedPullRequest?.sourceUrl ?? ""}`,
-  );
-  const pullRequests = newestBounded(
-    input.pullRequests ?? [],
-    MAX_PULL_REQUESTS,
-    (item) => item.updatedAt,
-    (item) => item.sourceUrl,
-  );
-
-  const claimComments = comments.filter(
-    (comment) =>
-      comment.body !== null &&
-      comment.author.login.toLowerCase() !== input.issue.authorLogin.toLowerCase() &&
-      !isBot(comment.author.login) &&
-      hasClaimLanguage(comment.body),
-  );
-
-  const explicitlyReferenced = pullRequests.filter((pr) =>
-    referencesIssue(`${pr.title}\n${pr.body ?? ""}`, input.issue.number, input.issue.canonicalUrl),
-  );
-  const timelinePullRequests = timeline.flatMap((event) =>
-    event.referencedPullRequest ? [event.referencedPullRequest] : [],
-  );
+      input.comments ?? [],
+      MAX_COMMENTS,
+      (i) => i.createdAt,
+      (i) => i.sourceUrl,
+    ),
+    timeline = newestBounded(
+      input.timeline ?? [],
+      MAX_TIMELINE_EVENTS,
+      (i) => i.createdAt,
+      (i) => `${i.event}:${i.sourceUrl}`,
+    ),
+    prs = newestBounded(
+      input.pullRequests ?? [],
+      MAX_PULL_REQUESTS,
+      (i) => i.updatedAt,
+      (i) => i.sourceUrl,
+    ),
+    claims = comments.filter(
+      (c) =>
+        c.body !== null &&
+        c.author.login.toLowerCase() !== input.issue.authorLogin.toLowerCase() &&
+        !isBot(c.author.login) &&
+        hasClaimLanguage(c.body),
+    );
+  const explicit = prs.filter((p) =>
+      referencesIssue(`${p.title}\n${p.body ?? ""}`, input.issue.number, input.issue.canonicalUrl),
+    ),
+    timelinePrs = timeline.flatMap((e) =>
+      e.referencedPullRequest ? [e.referencedPullRequest] : [],
+    );
+  const mentioned = new Set(
+      comments
+        .filter((c) => c.body && RESOLUTION_LANGUAGE.test(c.body) && !isBot(c.author.login))
+        .flatMap((c) => referencedPrNumbers(c.body!)),
+    ),
+    commentLinked = prs.filter((p) => mentioned.has(p.number));
   const byUrl = new Map<string, PullRequestEvidence>();
-  for (const pr of explicitlyReferenced) byUrl.set(pr.sourceUrl, pr);
-  for (const pr of timelinePullRequests) byUrl.set(pr.sourceUrl, pr);
-  const linked = [...byUrl.values()].sort(
-    (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
-  );
-  const active = linked.filter((pr) => pr.state === "open");
-  const draft = active.filter((pr) => pr.draft);
-  const merged = linked.filter((pr) => pr.mergedAt !== null);
-  const closed = linked.filter((pr) => pr.state === "closed" && pr.mergedAt === null);
-  const nonPr = timeline.filter(
-    (event) =>
-      ["cross-referenced", "connected", "referenced"].includes(event.event) &&
-      !event.referencedPullRequest,
-  );
-  const freshest = linked[0];
-  const latestClaim = claimComments[0];
-
+  for (const p of [...explicit, ...timelinePrs, ...commentLinked]) byUrl.set(p.sourceUrl, p);
+  const linked = [...byUrl.values()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
+    active = linked.filter((p) => p.state === "open"),
+    draft = active.filter((p) => p.draft),
+    merged = linked.filter((p) => p.mergedAt !== null),
+    closed = linked.filter((p) => p.state === "closed" && p.mergedAt === null),
+    nonPr = timeline.filter(
+      (e) =>
+        ["cross-referenced", "connected", "referenced"].includes(e.event) &&
+        !e.referencedPullRequest,
+    ),
+    freshest = linked[0],
+    latestClaim = claims[0];
   const fact = (
     key: string,
     value: string | number | boolean | null,
     url: string,
-    freshnessDays: number,
-  ): CompetitionFact => ({ key, value, sourceUrl: url, observedAt: input.asOf, freshnessDays });
-
-  const facts = [
+    d: number,
+  ): CompetitionFact => ({ key, value, sourceUrl: url, observedAt: input.asOf, freshnessDays: d });
+  const facts: CompetitionFact[] = [
     fact("issue.assigneeCount", input.issue.assignees.length, input.issue.canonicalUrl, 0),
     fact(
       "competition.linkedPullRequestCount",
@@ -261,40 +252,49 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
     ),
     fact(
       "competition.claimCommentCount",
-      claimComments.length,
+      claims.length,
       latestClaim?.sourceUrl ?? input.issue.canonicalUrl,
       latestClaim ? daysBetween(input.asOf, latestClaim.createdAt) : 0,
     ),
     fact("competition.nonPullRequestReferenceCount", nonPr.length, input.issue.canonicalUrl, 0),
   ];
-
+  if (active.length)
+    facts.push(
+      fact(
+        "competition.activeImplementation",
+        true,
+        active[0]!.sourceUrl,
+        daysBetween(input.asOf, active[0]!.updatedAt),
+      ),
+    );
+  if (input.issue.assignees.length)
+    facts.push(fact("competition.assignedIssue", true, input.issue.canonicalUrl, 0));
+  if (claims.length >= 6)
+    facts.push(
+      fact(
+        "competition.crowdedClaims",
+        true,
+        latestClaim?.sourceUrl ?? input.issue.canonicalUrl,
+        latestClaim ? daysBetween(input.asOf, latestClaim.createdAt) : 0,
+      ),
+    );
   const inferences: CompetitionInference[] = [];
-  if (input.issue.assignees.length) {
+  if (input.issue.assignees.length)
     inferences.push({
       key: "competition.assigned",
       value: true,
       basisFactKeys: ["issue.assigneeCount"],
       caution: "Assignment is visible evidence, but it does not prove work is still active.",
     });
-  }
-  if (active.length) {
+  if (active.length)
     inferences.push({
       key: "competition.activeImplementation",
       value: true,
-      basisFactKeys: ["competition.activePullRequestCount", "competition.draftPullRequestCount"],
+      basisFactKeys: ["competition.activePullRequestCount"],
       caution:
         "An open or draft linked pull request is active visible work, but it may still be abandoned.",
     });
-  } else if (merged.length + closed.length) {
-    inferences.push({
-      key: "competition.historicalImplementation",
-      value: true,
-      basisFactKeys: ["competition.mergedPullRequestCount", "competition.closedPullRequestCount"],
-      caution:
-        "Closed or merged work is historical evidence and is weaker than an active implementation.",
-    });
-  }
-  if (claimComments.length) {
+  if (claims.length)
     inferences.push({
       key: "competition.claimLanguage",
       value: true,
@@ -302,8 +302,7 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
       caution:
         "Claim language indicates intent only; it is weighted below assignment or an active pull request.",
     });
-  }
-  if (!input.issue.assignees.length && !active.length && !claimComments.length) {
+  if (!input.issue.assignees.length && !active.length && !claims.length)
     inferences.push({
       key: "competition.noneActiveVisible",
       value: true,
@@ -314,10 +313,8 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
       ],
       caution: "No active visible signal does not guarantee nobody is working privately.",
     });
-  }
-
-  const completeness = input.completeness ?? { timeline: true, pullRequests: true };
-  const warnings: string[] = [];
+  const completeness = input.completeness ?? { timeline: true, pullRequests: true },
+    warnings: string[] = [];
   if (input.comments === null) warnings.push("Comment evidence is unavailable.");
   if (input.timeline === null) warnings.push("Timeline evidence is unavailable.");
   if (input.pullRequests === null) warnings.push("Pull request evidence is unavailable.");
@@ -333,44 +330,42 @@ export function analyzeCompetition(input: CompetitionInput): CompetitionResult {
     warnings.push("Timeline evidence was bounded to 300 records.");
   if ((input.pullRequests?.length ?? 0) > MAX_PULL_REQUESTS)
     warnings.push("Pull request evidence was bounded to 100 records.");
-
-  const evidenceConfidence = confidence(
-    1 +
-      Number(input.comments !== null) +
-      Number(input.timeline !== null) +
-      Number(input.pullRequests !== null),
-    Number(input.timeline !== null && !completeness.timeline) +
-      Number(input.pullRequests !== null && !completeness.pullRequests),
-  );
-  const latestClaimDays = latestClaim ? daysBetween(input.asOf, latestClaim.createdAt) : 0;
-  const score = Math.max(
-    active.length >= 3 ? 100 : active.length === 2 ? 90 : active.length === 1 ? 80 : 0,
-    input.issue.assignees.length ? 75 : 0,
-    claimRisk(claimComments.length, latestClaimDays),
-    merged.length ? 20 : 0,
-    closed.length ? 10 : 0,
-  );
-  const status: CompetitionStatus =
-    active.length || input.issue.assignees.length
-      ? "visible"
-      : claimComments.length || merged.length + closed.length
-        ? "possible"
-        : input.comments === null && input.timeline === null && input.pullRequests === null
-          ? "uncertain"
-          : "none_visible";
-
+  const conf = confidence(
+      1 +
+        Number(input.comments !== null) +
+        Number(input.timeline !== null) +
+        Number(input.pullRequests !== null),
+      Number(input.timeline !== null && !completeness.timeline) +
+        Number(input.pullRequests !== null && !completeness.pullRequests),
+    ),
+    days = latestClaim ? daysBetween(input.asOf, latestClaim.createdAt) : 0,
+    score = Math.max(
+      active.length >= 3 ? 100 : active.length === 2 ? 90 : active.length === 1 ? 80 : 0,
+      input.issue.assignees.length ? 75 : 0,
+      claimRisk(claims.length, days),
+      merged.length ? 20 : 0,
+      closed.length ? 10 : 0,
+    ),
+    status: CompetitionStatus =
+      active.length || input.issue.assignees.length
+        ? "visible"
+        : claims.length || merged.length + closed.length
+          ? "possible"
+          : input.comments === null && input.timeline === null && input.pullRequests === null
+            ? "uncertain"
+            : "none_visible";
   return {
     version: "competition-v2",
     status,
     score,
-    confidence: evidenceConfidence,
+    confidence: conf,
     facts,
     inferences,
     warnings,
     evidenceWindow: {
       commentsUsed: comments.length,
       timelineEventsUsed: timeline.length,
-      pullRequestsUsed: pullRequests.length,
+      pullRequestsUsed: prs.length,
     },
   };
 }
