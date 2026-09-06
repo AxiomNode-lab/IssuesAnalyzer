@@ -1,0 +1,11 @@
+import type { MetadataRoute } from "next";
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  return [
+    {
+      url: "https://issueanalyzer.site",
+      changeFrequency: "weekly",
+      priority: 1,
+    },
+  ];
+}
