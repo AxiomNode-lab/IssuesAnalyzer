@@ -31,9 +31,6 @@ export default function Home() {
         <nav className="top-nav" aria-label="Primary navigation">
           <a href="#about">About</a>
           <a href="#how-it-works">How it works</a>
-          <a className="signin-link" href="/api/auth/github/start">
-            Sign in with GitHub
-          </a>
         </nav>
       </header>
 
