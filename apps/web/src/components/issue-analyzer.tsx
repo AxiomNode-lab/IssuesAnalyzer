@@ -44,7 +44,7 @@ export function IssueAnalyzer() {
         error?: string;
       };
       if (!response.ok || payload.report === undefined) {
-        throw new Error(payload.error || "The issue could not be analyzed. Please try again.");
+        throw new Error(payload.error || "We couldn’t analyze this issue. Please try again.");
       }
       setReport(payload.report);
       setStatus("success");
@@ -52,7 +52,7 @@ export function IssueAnalyzer() {
       setError(
         reason instanceof Error
           ? reason.message
-          : "The issue could not be analyzed. Please try again.",
+          : "We couldn’t analyze this issue. Please try again.",
       );
       setStatus("error");
     }
@@ -62,7 +62,7 @@ export function IssueAnalyzer() {
     <>
       <div className="analyzer">
         <form onSubmit={submit} noValidate>
-          <label htmlFor={inputId}>GitHub Issue URL</label>
+          <label htmlFor={inputId}>GitHub issue URL</label>
           <div className="form-row">
             <input
               id={inputId}
@@ -80,7 +80,7 @@ export function IssueAnalyzer() {
               }}
             />
             <button type="submit" disabled={status === "loading"}>
-              {status === "loading" ? "Analyzing…" : "Analyze issue →"}
+              {status === "loading" ? "Analyzing…" : "Analyze issue"}
             </button>
           </div>
           {status === "invalid" && (
@@ -90,7 +90,7 @@ export function IssueAnalyzer() {
           )}
           {status === "loading" && (
             <p className="form-message" role="status" aria-live="polite">
-              Analyzing live GitHub evidence…
+              Reviewing live GitHub evidence…
             </p>
           )}
           {status === "error" && (
