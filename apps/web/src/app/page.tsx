@@ -40,22 +40,21 @@ export default function Home() {
           <div className="hero-content">
             <div className="hero-eyebrow">
               <span className="hero-eyebrow-dot" aria-hidden="true" />
-              Public GitHub issue intelligence
+              GitHub issue intelligence
             </div>
             <h1 id="hero-title">
               Know before
               <span>you code.</span>
             </h1>
             <p className="lede">
-              Turn a public GitHub issue into a clear, evidence-backed decision. Understand
-              activity, competition, maintainer responsiveness, actionability, and risk before
-              investing your time.
+              Turn any public GitHub issue into a clear, evidence-backed decision. See activity,
+              competition, maintainer response, actionability, and risk before you invest your time.
             </p>
 
             <IssueAnalyzer />
 
             <div className="hero-meta" aria-label="Product promises and validation">
-              <span>Validated against real-world GitHub issue scenarios</span>
+              <span>Tested on real GitHub issue scenarios</span>
               <span>Public data only</span>
               <span>Explainable scoring</span>
               <span>No repository write access</span>
@@ -67,11 +66,11 @@ export default function Home() {
           <div className="results-heading-row">
             <div className="results-intro">
               <span>Analysis report</span>
-              <h2>Evidence, not guesswork.</h2>
+              <h2>Evidence over guesswork.</h2>
             </div>
             <p>
-              Your report separates facts from inferences, highlights freshness, and explains the
-              recommendation behind the score.
+              Each report separates facts from inferences, highlights how fresh the evidence is,
+              and explains the recommendation behind the score.
             </p>
           </div>
 
@@ -81,7 +80,7 @@ export default function Home() {
             </div>
             <div>
               <strong>Ready when you are.</strong>
-              <span>Paste a public issue URL above to generate the first analysis.</span>
+              <span>Paste a public GitHub issue URL above to generate your first analysis.</span>
             </div>
           </div>
         </section>
@@ -89,10 +88,10 @@ export default function Home() {
         <section className="info-section" id="how-it-works" aria-labelledby="how-title">
           <div className="section-copy">
             <span className="section-kicker">How it works</span>
-            <h2 id="how-title">A faster way to decide where your time is worth spending.</h2>
+            <h2 id="how-title">Decide faster where your time is actually worth spending.</h2>
             <p>
-              The analyzer turns scattered GitHub signals into one structured pre-flight report so
-              you can move forward with more context.
+              Issue Analyzer turns scattered GitHub signals into one structured pre-flight report,
+              so you can move forward with better context and less guesswork.
             </p>
           </div>
 
@@ -104,13 +103,13 @@ export default function Home() {
             </div>
             <div>
               <span>02</span>
-              <h3>Inspect the evidence</h3>
-              <p>We evaluate activity, competition, response patterns, and freshness.</p>
+              <h3>Review the evidence</h3>
+              <p>We evaluate activity, competition, response patterns, and evidence freshness.</p>
             </div>
             <div id="about">
               <span>03</span>
               <h3>Make the call</h3>
-              <p>Get an explainable pursue, review carefully, or skip recommendation.</p>
+              <p>Get a clear recommendation: pursue, review carefully, or skip.</p>
             </div>
           </div>
         </section>
