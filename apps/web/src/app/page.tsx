@@ -48,8 +48,7 @@ export default function Home() {
             </h1>
             <p className="lede">
               Turn any public GitHub issue into a clear, evidence-backed decision. See activity,
-              competition, maintainer responsiveness, actionability, and risk before you invest your
-              time.
+              competition, maintainer response, actionability, and risk before you invest your time.
             </p>
 
             <IssueAnalyzer />
