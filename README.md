@@ -4,7 +4,7 @@ Know whether a GitHub issue is worth your time before you start.
 
 GitHub Opportunity Radar analyzes a public issue and produces an explainable pre-flight report covering repository activity, maintainer responsiveness, competition, issue clarity, contribution readiness, and personal skill fit.
 
-> Status: local MVP with live, read-only analysis of public GitHub issues.
+> Status: public beta with live, read-only analysis of public GitHub issues.
 
 ## Product principles
 - Evidence before claims.
@@ -23,12 +23,12 @@ Paste a public GitHub issue URL and receive:
 - a suggested communication plan.
 
 ## Architecture
-The planned system is a TypeScript modular monolith with a separately runnable worker, PostgreSQL, Redis-backed caching/jobs, and a GitHub App using minimal read-only permissions.
+The current system is a TypeScript monorepo. The web app handles the public UI and server-side analysis; shared packages provide GitHub access, evidence analysis, scoring, persistence, and runtime configuration.
 
 ```text
-apps/web       Web UI and server routes
-apps/worker    Background evidence refresh
-packages/*     Domain, GitHub adapter, scoring, database, config
+apps/web       Web UI, API routes, and analysis orchestration
+apps/worker    Reserved for background jobs
+packages/*     Domain, GitHub adapter, evidence analyzers, scoring, database, config
 docs/          Product and engineering source of truth
 tests/         Contract and end-to-end suites
 ```
