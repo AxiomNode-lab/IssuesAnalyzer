@@ -1,6 +1,6 @@
 # Local development
 
-This document is the source of truth for setting up the MVP workspace.
+This document is the source of truth for setting up the development workspace.
 
 ## Prerequisites
 
@@ -20,7 +20,7 @@ pnpm install
 pnpm verify
 ```
 
-Do not commit secrets. Copy a future `.env.example` file when an application introduces environment variables; never commit a populated `.env` file.
+Do not commit secrets. Copy `.env.example` when local application configuration is needed; never commit a populated `.env` file.
 
 ## Workspace layout
 
@@ -34,18 +34,18 @@ Do not commit secrets. Copy a future `.env.example` file when an application int
 - `tests/contract`: GitHub API contract fixtures.
 - `tests/e2e`: browser-level acceptance tests.
 
-The current bootstrap does not install application frameworks or external services. Those are introduced in their own reviewed pull requests.
+The web application and analysis packages are part of the current main branch. External services such as PostgreSQL and Redis are configured only when the corresponding features are used.
 
 ## Root commands
 
 | Command             | Purpose                                                  |
 | ------------------- | -------------------------------------------------------- |
-| `pnpm dev`          | Run the web workspace after MVP-02 creates it.           |
+| `pnpm dev`          | Run the web application locally.                         |
 | `pnpm format`       | Apply deterministic formatting.                          |
 | `pnpm format:check` | Verify formatting without writing files.                 |
 | `pnpm lint`         | Run static lint checks.                                  |
 | `pnpm typecheck`    | Type-check all workspaces that define the command.       |
-| `pnpm test`         | Run unit tests; succeeds before the first test is added. |
+| `pnpm test`         | Run the unit and application test suites.                |
 | `pnpm build`        | Build all workspaces that define the command.            |
 | `pnpm verify`       | Run every required local quality check.                  |
 
