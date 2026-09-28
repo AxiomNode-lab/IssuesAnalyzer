@@ -14,7 +14,7 @@ GitHub Opportunity Radar analyzes a public issue and produces an explainable pre
 - Fast progressive results with graceful degradation.
 - Accessibility and testing are release requirements.
 
-## MVP
+## What it does
 Paste a public GitHub issue URL and receive:
 - a pursue/review/skip recommendation;
 - component scores and confidence;
