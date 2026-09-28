@@ -10,4 +10,4 @@ Use GitHub's private vulnerability reporting feature when enabled. Until it is e
 
 Do not include credentials or exploit other users. Receipt should be acknowledged within 5 business days. Remediation timing depends on severity and validation.
 
-Supported versions will be listed here when the first public release is published.
+Security support is handled per release and commit. Check the repository history and release notes for the version under review.
