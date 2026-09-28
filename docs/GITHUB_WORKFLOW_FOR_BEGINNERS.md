@@ -183,24 +183,17 @@ git branch -d feat/mvp-02-app-shell
 
 The remote branch may also be deleted after merge.
 
-## How to know what to work on now
+## How to choose the next task
 
-Use this order:
+Use the current issue tracker rather than relying on an old milestone list:
 
-1. Open the MVP tracker.
-2. Find the first unchecked issue whose dependencies are finished.
-3. Ensure no existing open PR covers it.
-4. Assign it to yourself.
-5. Restate its scope in your own words.
-6. Create the branch.
-7. Open a draft PR early.
-8. Implement only its acceptance criteria.
+1. Find an open issue whose dependencies are complete.
+2. Check for an existing open PR covering the same work.
+3. Confirm the acceptance criteria.
+4. Create one focused branch and PR.
+5. Run `pnpm verify` before requesting review.
 
-For the current project:
-
-- MVP-01 is being implemented in draft PR #22.
-- MVP-02 should not be merged before MVP-01 is complete because it depends on the workspace foundation.
-- You may read and refine MVP-02 now, but production code should branch from the updated `main` after MVP-01 merges.
+Do not use historical milestone names or closed PRs as the source of current project status.
 
 ## Quick example
 
